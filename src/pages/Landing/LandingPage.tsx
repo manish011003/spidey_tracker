@@ -3,9 +3,21 @@ import { BootScreen } from '../../components/pixel/BootScreen'
 import { useAuth } from '../../context/AuthContext'
 
 export function LandingPage() {
-  const { signIn, loading, error, configured, profile, user, returningFromGoogle } = useAuth()
+  const {
+    signIn,
+    startPhoneSignIn,
+    confirmPhoneSignIn,
+    cancelPhoneSignIn,
+    phoneCodeSent,
+    phoneHint,
+    loading,
+    error,
+    configured,
+    profile,
+    user,
+    returningFromGoogle,
+  } = useAuth()
 
-  // After Google redirect / popup, leave the boot screen automatically
   if (!loading && user && profile) {
     return (
       <Navigate
@@ -18,6 +30,11 @@ export function LandingPage() {
   return (
     <BootScreen
       onSignIn={() => void signIn()}
+      onSendPhoneCode={(phone) => void startPhoneSignIn(phone)}
+      onConfirmPhoneCode={(code) => void confirmPhoneSignIn(code)}
+      onCancelPhone={cancelPhoneSignIn}
+      phoneCodeSent={phoneCodeSent}
+      phoneHint={phoneHint}
       loading={loading}
       error={error}
       configured={configured}

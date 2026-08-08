@@ -161,7 +161,7 @@ export async function ensureUserShell(user: User): Promise<UserProfile> {
 
   const payload: Record<string, unknown> = {
     uid: user.uid,
-    displayName: user.displayName?.trim() || 'Spider',
+    displayName: user.displayName?.trim() || user.phoneNumber || 'Spider',
     email: user.email ?? '',
     role: 'boyfriend',
     spiderId: 'classic',

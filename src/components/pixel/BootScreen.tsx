@@ -5,6 +5,11 @@ import { PixelLoader } from './PixelLoader'
 
 type Props = {
   onSignIn: () => void
+  onSendPhoneCode?: (phone: string) => void
+  onConfirmPhoneCode?: (code: string) => void
+  onCancelPhone?: () => void
+  phoneCodeSent?: boolean
+  phoneHint?: string | null
   loading?: boolean
   error?: string | null
   skipAnimation?: boolean
@@ -22,6 +27,11 @@ const STEPS = [
 
 export function BootScreen({
   onSignIn,
+  onSendPhoneCode,
+  onConfirmPhoneCode,
+  onCancelPhone,
+  phoneCodeSent = false,
+  phoneHint = null,
   loading,
   error,
   skipAnimation,
@@ -30,10 +40,12 @@ export function BootScreen({
 }: Props) {
   const [step, setStep] = useState(skipAnimation ? STEPS.length - 1 : 0)
   const [ready, setReady] = useState(Boolean(skipAnimation))
+  const [phoneMode, setPhoneMode] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [otp, setOtp] = useState('')
 
   useEffect(() => {
     if (skipAnimation) return
-    // Don't create AudioContext here — browsers block it until a click
     let i = 0
     const id = window.setInterval(() => {
       i += 1
@@ -46,6 +58,10 @@ export function BootScreen({
     }, 700)
     return () => window.clearInterval(id)
   }, [skipAnimation])
+
+  useEffect(() => {
+    if (phoneCodeSent) setPhoneMode(true)
+  }, [phoneCodeSent])
 
   return (
     <div
@@ -61,6 +77,9 @@ export function BootScreen({
           backgroundSize: '24px 24px',
         }}
       />
+
+      {/* Invisible reCAPTCHA host for phone auth */}
+      <div id="spidey-recaptcha" className="hidden" aria-hidden />
 
       <div className="relative z-10 flex flex-col items-center gap-6 max-w-md w-full text-center crt-flicker">
         <p className="pixel-label" style={{ color: 'var(--spidey-text-dim)', fontSize: 8 }}>
@@ -78,14 +97,11 @@ export function BootScreen({
           TRACKER
         </h1>
 
-        <div
-          className="pixel-inset p-4 w-full"
-          style={{ borderColor: 'var(--spidey-frame)' }}
-        >
+        <div className="pixel-inset p-4 w-full" style={{ borderColor: 'var(--spidey-frame)' }}>
           {!ready ? (
             <PixelLoader label={STEPS[step]} progress={((step + 1) / STEPS.length) * 100} />
           ) : (
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-3">
               <p className="pixel-label blink" style={{ color: 'var(--spidey-green)' }}>
                 SYSTEM READY
               </p>
@@ -106,16 +122,116 @@ export function BootScreen({
                   {error}
                 </p>
               )}
-              <PixelButton
-                onClick={onSignIn}
-                disabled={loading || !configured}
-                className="w-full max-w-xs"
-                aria-label="Sign in with Google"
-              >
-                {loading
-                  ? statusLabel || 'VERIFYING...'
-                  : 'SIGN IN WITH GOOGLE'}
-              </PixelButton>
+
+              {!phoneMode ? (
+                <>
+                  <PixelButton
+                    onClick={onSignIn}
+                    disabled={loading || !configured}
+                    className="w-full max-w-xs"
+                    aria-label="Sign in with Google"
+                  >
+                    {loading ? statusLabel || 'VERIFYING...' : 'SIGN IN WITH GOOGLE'}
+                  </PixelButton>
+                  {onSendPhoneCode && (
+                    <PixelButton
+                      variant="cyan"
+                      className="w-full max-w-xs !text-[7px]"
+                      disabled={loading || !configured}
+                      onClick={() => {
+                        setPhoneMode(true)
+                      }}
+                    >
+                      SIGN IN WITH PHONE
+                    </PixelButton>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col gap-2 w-full max-w-xs text-left">
+                  <p className="pixel-label text-center" style={{ fontSize: 6, color: 'var(--spidey-cyan)' }}>
+                    {phoneCodeSent ? 'ENTER SMS CODE' : 'PHONE SIGN-IN'}
+                  </p>
+                  {!phoneCodeSent ? (
+                    <>
+                      <input
+                        className="pixel-input w-full text-center"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        placeholder="+91XXXXXXXXXX"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        disabled={loading}
+                        aria-label="Phone number"
+                      />
+                      <p
+                        className="pixel-label text-center"
+                        style={{ fontSize: 5, color: 'var(--spidey-text-dim)' }}
+                      >
+                        USE +COUNTRY CODE · 10-DIGIT INDIA → +91
+                      </p>
+                      <PixelButton
+                        className="w-full !text-[7px]"
+                        disabled={loading || phone.trim().length < 8}
+                        onClick={() => onSendPhoneCode?.(phone)}
+                      >
+                        {loading ? 'SENDING...' : 'SEND SMS CODE'}
+                      </PixelButton>
+                    </>
+                  ) : (
+                    <>
+                      {phoneHint && (
+                        <p
+                          className="pixel-label text-center"
+                          style={{ fontSize: 6, color: 'var(--spidey-yellow)' }}
+                        >
+                          CODE SENT → {phoneHint}
+                        </p>
+                      )}
+                      <input
+                        className="pixel-input w-full text-center tracking-[0.4em]"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        placeholder="••••••"
+                        maxLength={6}
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        disabled={loading}
+                        aria-label="SMS verification code"
+                      />
+                      <PixelButton
+                        className="w-full !text-[7px]"
+                        disabled={loading || otp.length !== 6}
+                        onClick={() => onConfirmPhoneCode?.(otp)}
+                      >
+                        {loading ? 'VERIFYING...' : 'VERIFY & ENTER'}
+                      </PixelButton>
+                      <PixelButton
+                        variant="ghost"
+                        className="w-full !text-[6px]"
+                        disabled={loading}
+                        onClick={() => {
+                          setOtp('')
+                          onSendPhoneCode?.(phoneHint || phone)
+                        }}
+                      >
+                        RESEND CODE
+                      </PixelButton>
+                    </>
+                  )}
+                  <PixelButton
+                    variant="ghost"
+                    className="w-full !text-[6px]"
+                    disabled={loading}
+                    onClick={() => {
+                      setPhoneMode(false)
+                      setOtp('')
+                      onCancelPhone?.()
+                    }}
+                  >
+                    BACK
+                  </PixelButton>
+                </div>
+              )}
             </div>
           )}
         </div>
