@@ -80,6 +80,7 @@ export async function signInWithGoogle(): Promise<User> {
     return result.user
   } catch (error: unknown) {
     const code = authCode(error)
+    const msg = authMessage(error)
 
     if (code === 'auth/network-request-failed') {
       throw new Error('WEB CONNECTION INTERRUPTED')
