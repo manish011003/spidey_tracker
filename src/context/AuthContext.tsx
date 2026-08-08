@@ -12,7 +12,10 @@ import type { User } from 'firebase/auth'
 import type { UserProfile } from '../types'
 import { isFirebaseConfigured } from '../services/firebase/config'
 import {
+  clearRedirectPending,
   handleRedirectResult,
+  hardResetToLogin,
+  isRedirectPending,
   signInWithGoogle,
   signOut as firebaseSignOut,
   subscribeToAuth,
@@ -28,6 +31,7 @@ type AuthContextValue = {
   loading: boolean
   error: string | null
   configured: boolean
+  returningFromGoogle: boolean
   signIn: () => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -51,10 +55,9 @@ function formatShellError(e: unknown): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  /** First auth + profile hydrate */
   const [initializing, setInitializing] = useState(true)
-  /** Google popup / redirect in progress (button only) */
   const [signingIn, setSigningIn] = useState(false)
+  const [returningFromGoogle, setReturningFromGoogle] = useState(() => isRedirectPending())
   const [error, setError] = useState<string | null>(null)
   const shellGen = useRef(0)
 
@@ -66,13 +69,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let unsub: (() => void) | undefined
     let cancelled = false
+    let pendingWatch: number | undefined
 
     void (async () => {
+      const pending = isRedirectPending()
+      if (pending) setReturningFromGoogle(true)
+
       try {
         await handleRedirectResult()
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'IDENTITY VERIFICATION FAILED')
+          clearRedirectPending()
+          setReturningFromGoogle(false)
         }
       }
       if (cancelled) return
@@ -85,8 +94,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(null)
           setInitializing(false)
           setSigningIn(false)
+
+          // Returned from Google but session never attached (common on mobile without resolver)
+          if (isRedirectPending()) {
+            if (pendingWatch) window.clearTimeout(pendingWatch)
+            pendingWatch = window.setTimeout(() => {
+              if (cancelled) return
+              if (isRedirectPending()) {
+                clearRedirectPending()
+                setReturningFromGoogle(false)
+                setSigningIn(false)
+                setInitializing(false)
+                setError('MOBILE SIGN-IN INTERRUPTED — TAP SIGN IN AGAIN')
+              }
+            }, 10_000)
+          }
           return
         }
+
+        if (pendingWatch) window.clearTimeout(pendingWatch)
+        clearRedirectPending()
+        setReturningFromGoogle(false)
 
         void (async () => {
           try {
@@ -122,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
       unsub?.()
+      if (pendingWatch) window.clearTimeout(pendingWatch)
     }
   }, [])
 
@@ -157,31 +186,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSigningIn(true)
     try {
       await signInWithGoogle()
-      // Popup success — profile hydrate continues in onAuthStateChanged
-      // Keep signingIn until shell loads (cleared there). Safety timeout below.
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'IDENTITY VERIFICATION FAILED'
       if (msg === 'REDIRECT_STARTED') {
-        // Full-page navigation; leave signingIn true until unload
+        setReturningFromGoogle(true)
         return
       }
       setError(msg)
       setSigningIn(false)
+      setReturningFromGoogle(false)
       return
     }
-    // If auth listener is slow, don't trap the button forever
     window.setTimeout(() => setSigningIn(false), 20_000)
   }, [])
 
   const signOut = useCallback(async () => {
     setError(null)
     setSigningIn(false)
+    setReturningFromGoogle(false)
     try {
       await firebaseSignOut()
     } finally {
       setProfile(null)
       setUser(null)
       setInitializing(false)
+      // Full reload avoids sticky mobile auth / SPA state after logout
+      hardResetToLogin()
     }
   }, [])
 
@@ -191,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(p)
   }, [user])
 
-  const loading = initializing || signingIn
+  const loading = initializing || signingIn || returningFromGoogle
 
   const value = useMemo(
     () => ({
@@ -200,12 +230,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       configured: isFirebaseConfigured,
+      returningFromGoogle,
       signIn,
       signOut,
       refreshProfile,
       clearError: () => setError(null),
     }),
-    [user, profile, loading, error, signIn, signOut, refreshProfile],
+    [user, profile, loading, error, returningFromGoogle, signIn, signOut, refreshProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

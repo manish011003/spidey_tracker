@@ -1,5 +1,12 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
-import { getAuth, type Auth } from 'firebase/auth'
+import {
+  getAuth,
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  type Auth,
+} from 'firebase/auth'
 import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore'
 import { getDatabase, type Database } from 'firebase/database'
 
@@ -28,13 +35,22 @@ let rtdb: Database | null = null
 
 if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig)
-  auth = getAuth(app)
-  // Google accounts without a photo (and optional fields) send `undefined`,
-  // which Firestore rejects unless this is enabled — breaks new-user signup.
+
+  // Mobile Google redirect REQUIRES browserPopupRedirectResolver.
+  // Plain getAuth() often "succeeds" on Google then returns with no session on iOS/Android.
+  try {
+    auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
+    })
+  } catch {
+    auth = getAuth(app)
+  }
+
   try {
     initializeFirestore(app, { ignoreUndefinedProperties: true })
   } catch {
-    /* already initialized in HMR / strict remount */
+    /* HMR remount */
   }
   db = getFirestore(app)
   rtdb = getDatabase(app)

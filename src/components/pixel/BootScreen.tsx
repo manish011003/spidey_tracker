@@ -9,6 +9,8 @@ type Props = {
   error?: string | null
   skipAnimation?: boolean
   configured?: boolean
+  /** Overrides the VERIFYING… button label (e.g. mobile redirect return). */
+  statusLabel?: string
 }
 
 const STEPS = [
@@ -24,6 +26,7 @@ export function BootScreen({
   error,
   skipAnimation,
   configured = true,
+  statusLabel,
 }: Props) {
   const [step, setStep] = useState(skipAnimation ? STEPS.length - 1 : 0)
   const [ready, setReady] = useState(Boolean(skipAnimation))
@@ -109,7 +112,9 @@ export function BootScreen({
                 className="w-full max-w-xs"
                 aria-label="Sign in with Google"
               >
-                {loading ? 'VERIFYING...' : 'SIGN IN WITH GOOGLE'}
+                {loading
+                  ? statusLabel || 'VERIFYING...'
+                  : 'SIGN IN WITH GOOGLE'}
               </PixelButton>
             </div>
           )}

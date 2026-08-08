@@ -5,8 +5,6 @@ import {
   getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  setPersistence,
-  browserLocalPersistence,
   type User,
 } from 'firebase/auth'
 import { isFirebaseConfigured, requireAuth } from './config'
@@ -14,15 +12,48 @@ import { isFirebaseConfigured, requireAuth } from './config'
 const provider = new GoogleAuthProvider()
 provider.setCustomParameters({ prompt: 'select_account' })
 
-let persistenceReady: Promise<void> | null = null
+/** Survives the Google redirect round-trip on mobile. */
+export const AUTH_REDIRECT_PENDING_KEY = 'spidey_auth_redirect_pending'
+export const AUTH_REDIRECT_AT_KEY = 'spidey_auth_redirect_at'
 
-function ensurePersistence(): Promise<void> {
-  if (!persistenceReady) {
-    persistenceReady = setPersistence(requireAuth(), browserLocalPersistence).catch((err) => {
-      console.warn('[auth] setPersistence failed', err)
-    })
+export function markRedirectPending(): void {
+  try {
+    sessionStorage.setItem(AUTH_REDIRECT_PENDING_KEY, '1')
+    sessionStorage.setItem(AUTH_REDIRECT_AT_KEY, String(Date.now()))
+  } catch {
+    /* private mode */
   }
-  return persistenceReady
+}
+
+export function clearRedirectPending(): void {
+  try {
+    sessionStorage.removeItem(AUTH_REDIRECT_PENDING_KEY)
+    sessionStorage.removeItem(AUTH_REDIRECT_AT_KEY)
+  } catch {
+    /* private mode */
+  }
+}
+
+export function isRedirectPending(): boolean {
+  try {
+    return sessionStorage.getItem(AUTH_REDIRECT_PENDING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function isMobileAuthClient(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return true
+  const ua = navigator.userAgent
+  if (/iPhone|iPad|iPod|Android/i.test(ua)) return true
+  // iPadOS 13+ desktop UA
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true
+  try {
+    if (window.self !== window.top) return true
+  } catch {
+    return true
+  }
+  return false
 }
 
 function authCode(error: unknown): string | undefined {
@@ -56,22 +87,9 @@ function shouldUseRedirectFallback(error: unknown): boolean {
   return false
 }
 
-function preferRedirectFirst(): boolean {
-  if (typeof window === 'undefined') return true
-  const ua = navigator.userAgent
-  // Mobile browsers often break popups; desktop popup is more reliable after logout
-  if (/iPhone|iPad|iPod|Android/i.test(ua)) return true
-  try {
-    if (window.self !== window.top) return true
-  } catch {
-    return true
-  }
-  return false
-}
-
 async function startRedirect(): Promise<never> {
   const auth = requireAuth()
-  await ensurePersistence()
+  markRedirectPending()
   await signInWithRedirect(auth, provider)
   throw new Error('REDIRECT_STARTED')
 }
@@ -110,14 +128,15 @@ function mapAuthError(error: unknown): Error {
 
 export async function signInWithGoogle(): Promise<User> {
   const auth = requireAuth()
-  await ensurePersistence()
 
-  if (preferRedirectFirst()) {
+  // Mobile: redirect (popup unreliable). Desktop: popup first.
+  if (isMobileAuthClient()) {
     return startRedirect()
   }
 
   try {
     const result = await signInWithPopup(auth, provider)
+    clearRedirectPending()
     return result.user
   } catch (error: unknown) {
     if (shouldUseRedirectFallback(error)) {
@@ -129,23 +148,55 @@ export async function signInWithGoogle(): Promise<User> {
   }
 }
 
+/**
+ * Must run once on cold start before other auth work.
+ * Retries briefly — iOS often races IndexedDB right after returning from Google.
+ */
 export async function handleRedirectResult(): Promise<User | null> {
   if (!isFirebaseConfigured) return null
   const auth = requireAuth()
-  await ensurePersistence()
-  try {
+  const pending = isRedirectPending()
+
+  const attempt = async (): Promise<User | null> => {
     const result = await getRedirectResult(auth)
-    return result?.user ?? null
+    if (result?.user) {
+      clearRedirectPending()
+      return result.user
+    }
+    return null
+  }
+
+  try {
+    const first = await attempt()
+    if (first) return first
+
+    // Mobile Safari: first getRedirectResult often null / throws while IDB settles
+    if (pending) {
+      for (let i = 0; i < 3; i++) {
+        await new Promise((r) => setTimeout(r, 350 + i * 200))
+        try {
+          const again = await attempt()
+          if (again) return again
+        } catch (error: unknown) {
+          const msg = authMessage(error)
+          if (msg.includes('Database is closing') || msg.includes('closing/hidden')) {
+            console.warn('[auth] redirect IDB race, retry', i)
+            continue
+          }
+          throw error
+        }
+      }
+    }
+    return null
   } catch (error: unknown) {
     const code = authCode(error)
-    if (
-      authMessage(error).includes('Database is closing') ||
-      authMessage(error).includes('closing/hidden')
-    ) {
+    const msg = authMessage(error)
+    if (msg.includes('Database is closing') || msg.includes('closing/hidden')) {
       console.warn('[auth] redirect result IndexedDB race — relying on onAuthStateChanged')
       return null
     }
     if (code === 'auth/unauthorized-domain') {
+      clearRedirectPending()
       throw new Error('DOMAIN NOT AUTHORIZED IN FIREBASE AUTH SETTINGS')
     }
     console.warn('[auth] getRedirectResult:', code, error)
@@ -155,6 +206,7 @@ export async function handleRedirectResult(): Promise<User | null> {
 
 export async function signOut(): Promise<void> {
   const auth = requireAuth()
+  clearRedirectPending()
   await firebaseSignOut(auth)
 }
 
@@ -165,4 +217,11 @@ export function subscribeToAuth(callback: (user: User | null) => void): () => vo
   }
   const auth = requireAuth()
   return onAuthStateChanged(auth, callback)
+}
+
+/** Hard navigation after logout — clears sticky mobile SPA/auth state. */
+export function hardResetToLogin(): void {
+  clearRedirectPending()
+  const url = `${window.location.origin}/?signedOut=${Date.now()}`
+  window.location.replace(url)
 }

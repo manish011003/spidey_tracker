@@ -697,9 +697,7 @@ export function TrackerPage() {
         profile={profile}
         onClose={() => setProfileOpen(false)}
         onSignOut={() => {
-          void signOut().then(() => {
-            window.location.assign('/')
-          })
+          void signOut()
         }}
         onDeleted={() => {
           setProfileOpen(false)

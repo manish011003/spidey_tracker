@@ -22,9 +22,7 @@ export function SettingsPage() {
         profile={profile}
         onClose={() => setOpen(false)}
         onSignOut={() => {
-          void signOut().then(() => {
-            window.location.assign('/')
-          })
+          void signOut()
         }}
         onOpenPartnerLink={() => setOpen(false)}
         sharing={location.sharing}
