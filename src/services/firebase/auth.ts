@@ -122,6 +122,11 @@ async function startRedirect(): Promise<never> {
  */
 export async function signInWithGoogle(): Promise<User> {
   const auth = requireAuth()
+  const host = typeof window !== 'undefined' ? window.location.hostname : ''
+  // Preview deploy URLs are not registered with Google OAuth
+  if (host.endsWith('.vercel.app') && host !== 'spidey-tracker-pi.vercel.app') {
+    throw new Error('USE PRODUCTION URL — PREVIEW DEPLOYS BLOCK GOOGLE LOGIN')
+  }
 
   if (isMobileAuthClient()) {
     return startRedirect()
