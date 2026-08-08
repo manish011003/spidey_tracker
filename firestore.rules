@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isLinkedPartner(uid) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && userDoc(uid).partnerId == request.auth.uid;
+    }
+
+    function isFriendOf(uid) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && request.auth.uid in userDoc(uid).friendIds;
+    }
+
+    function isRelationshipMember(relationshipId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/relationships/$(relationshipId))
+        && request.auth.uid in get(/databases/$(database)/documents/relationships/$(relationshipId)).data.memberIds;
+    }
+
+    function linkFieldsOnly() {
+      return request.resource.data.uid == resource.data.uid
+        && request.resource.data.partnerCode == resource.data.partnerCode
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.spiderId == resource.data.spiderId
+        && request.resource.data.suitId == resource.data.suitId
+        && request.resource.data.displayName == resource.data.displayName
+        && request.resource.data.onboardingComplete == resource.data.onboardingComplete;
+    }
+
+    match /users/{userId} {
+      allow read: if isSelf(userId)
+        || isLinkedPartner(userId)
+        || isFriendOf(userId)
+        || (resource.data.onboardingComplete == true && resource.data.partnerId == null);
+
+      allow create: if isSelf(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.partnerId == null
+        && request.resource.data.relationshipId == null
+        && request.resource.data.onboardingComplete == false;
+
+      allow update: if
+        // Owner updating own profile (non-destructive partner changes allowed as pairs)
+        (isSelf(userId)
+          && request.resource.data.uid == userId
+          && request.resource.data.partnerCode == resource.data.partnerCode
+          && request.resource.data.email == resource.data.email)
+        // Incoming link: other user sets themselves as partner on an available profile
+        || (isSignedIn()
+          && resource.data.partnerId == null
+          && resource.data.relationshipId == null
+          && resource.data.onboardingComplete == true
+          && request.resource.data.partnerId == request.auth.uid
+          && request.resource.data.relationshipId is string
+          && linkFieldsOnly())
+        // Incoming unlink: current partner clears the link
+        || (isSignedIn()
+          && resource.data.partnerId == request.auth.uid
+          && request.resource.data.partnerId == null
+          && request.resource.data.relationshipId == null
+          && linkFieldsOnly())
+        // Incoming friend add: other user adds themselves to friendIds
+        || (isSignedIn()
+          && request.auth.uid in request.resource.data.friendIds
+          && !(request.auth.uid in resource.data.get('friendIds', []))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friendIds', 'updatedAt']))
+        // Incoming friend remove: other user removes themselves from friendIds
+        || (isSignedIn()
+          && request.auth.uid in resource.data.get('friendIds', [])
+          && !(request.auth.uid in request.resource.data.get('friendIds', []))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friendIds', 'updatedAt']));
+
+      allow delete: if isSelf(userId);
+    }
+
+    match /partnerCodes/{code} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+    }
+
+    match /relationships/{relationshipId} {
+      allow read: if isRelationshipMember(relationshipId);
+
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.memberIds
+        && request.resource.data.memberIds.size() == 2
+        && request.resource.data.status == 'active';
+
+      allow update: if isRelationshipMember(relationshipId)
+        && request.resource.data.memberIds == resource.data.memberIds;
+
+      allow delete: if false;
+
+      match /events/{eventId} {
+        allow read: if isRelationshipMember(relationshipId);
+
+        allow create: if isRelationshipMember(relationshipId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.title is string
+          && request.resource.data.latitude is number
+          && request.resource.data.longitude is number;
+
+        allow update: if isRelationshipMember(relationshipId)
+          && request.resource.data.createdBy == resource.data.createdBy;
+
+        allow delete: if isRelationshipMember(relationshipId)
+          && resource.data.createdBy == request.auth.uid;
+      }
+    }
+  }
+}

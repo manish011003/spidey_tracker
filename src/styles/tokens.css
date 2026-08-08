@@ -1,0 +1,46 @@
+:root {
+  --spidey-bg: #071426;
+  --spidey-bg-deep: #040c18;
+  --spidey-panel: #0a1a2e;
+  --spidey-panel-2: #0c2238;
+  --spidey-blue: #1a3a5c;
+  /* Frame blues closer to the reference bezel */
+  --spidey-frame: #3a8fd4;
+  --spidey-frame-dark: #2468a8;
+  --spidey-frame-mid: #2f7fc2;
+  --spidey-frame-light: #6bb8ef;
+  --spidey-cyan: #5ce1e6;
+  --spidey-orange: #f08833;
+  --spidey-orange-dark: #c96a1a;
+  --spidey-yellow: #ffcc22;
+  --spidey-yellow-light: #ffe066;
+  --spidey-red: #e53935;
+  --spidey-green: #6fc041;
+  --spidey-green-dark: #4e8c2a;
+  --spidey-text: #e8f4f8;
+  --spidey-text-dim: #8fb8c4;
+  --spidey-black: #020810;
+  --spidey-white: #f5fbff;
+  --spidey-pixel: 4px;
+  --spidey-shadow: 4px 4px 0 #020810;
+  --spidey-shadow-sm: 2px 2px 0 #020810;
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-readable: 'VT323', 'Courier New', monospace;
+  --frame-pad: 14px;
+  --map-min-h: 360px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-scale: 0;
+  }
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

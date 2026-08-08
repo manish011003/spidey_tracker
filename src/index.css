@@ -1,0 +1,121 @@
+@import 'tailwindcss';
+@import './styles/tokens.css';
+@import './styles/pixel.css';
+@import 'leaflet/dist/leaflet.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--spidey-bg-deep);
+  color: var(--spidey-text);
+}
+
+body {
+  font-family: var(--font-readable);
+  -webkit-font-smoothing: none;
+  image-rendering: pixelated;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.leaflet-container {
+  font-family: var(--font-readable);
+  background: #071426;
+}
+
+.leaflet-control-attribution {
+  background: rgba(7, 20, 38, 0.75) !important;
+  color: var(--spidey-text-dim) !important;
+  font-size: 10px !important;
+  max-width: 50%;
+}
+
+.leaflet-control-attribution a {
+  color: var(--spidey-cyan) !important;
+}
+
+.spidey-marker,
+.spidey-event-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.map-signal-chip {
+  background: rgba(7, 20, 38, 0.92);
+  border: 3px solid var(--spidey-black);
+  box-shadow: 3px 3px 0 #020810;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.map-signal-chip--action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.spidey-popup .leaflet-popup-content-wrapper {
+  background: var(--spidey-panel);
+  border: 3px solid var(--spidey-black);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 #020810;
+  color: var(--spidey-text);
+}
+
+.spidey-popup .leaflet-popup-tip {
+  background: var(--spidey-panel);
+  border: none;
+  box-shadow: none;
+}
+
+.spidey-popup__body {
+  font-family: var(--font-readable);
+  font-size: 16px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.spidey-popup__body strong {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--spidey-cyan);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--spidey-bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--spidey-frame);
+  border: 2px solid var(--spidey-black);
+}
