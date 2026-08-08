@@ -6,6 +6,7 @@ import { linkPartner, unlinkPartner } from '../../services/firebase/relationship
 import { addFriend } from '../../services/firebase/friends'
 import { normalizePartnerCode } from '../../utils/partnerCode'
 import { playSound, unlockAudio } from '../../services/sound/audio'
+import { ShareCodeButtons } from '../share/ShareCodeButtons'
 
 type Props = {
   open: boolean
@@ -24,11 +25,6 @@ export function PartnerLinkModal({ open, profile, partner, onClose, onChanged }:
   const [busy, setBusy] = useState(false)
   const [confirmUnlink, setConfirmUnlink] = useState(false)
   const [friendNotice, setFriendNotice] = useState<string | null>(null)
-
-  const copy = async () => {
-    await navigator.clipboard.writeText(profile.partnerCode)
-    playSound('click')
-  }
 
   const link = async () => {
     setBusy(true)
@@ -96,9 +92,11 @@ export function PartnerLinkModal({ open, profile, partner, onClose, onChanged }:
           >
             {profile.partnerCode}
           </p>
-          <PixelButton className="mt-3" variant="cyan" onClick={() => void copy()}>
-            COPY CODE
-          </PixelButton>
+          <ShareCodeButtons
+            code={profile.partnerCode}
+            displayName={profile.displayName}
+            compact
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-2">

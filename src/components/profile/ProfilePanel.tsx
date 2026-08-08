@@ -11,6 +11,7 @@ import { getSpider } from '../../data/spiders'
 import { playSound, setSoundEnabled } from '../../services/sound/audio'
 import { updatePreferences, updateProfileFields } from '../../services/firebase/users'
 import { deleteAccount } from '../../services/firebase/account'
+import { ShareCodeButtons } from '../share/ShareCodeButtons'
 
 type Props = {
   open: boolean
@@ -242,6 +243,11 @@ export function ProfilePanel({
           >
             {profile.partnerCode}
           </p>
+          <ShareCodeButtons
+            code={profile.partnerCode}
+            displayName={profile.displayName}
+            compact
+          />
         </div>
 
         {onOpenGuide && (

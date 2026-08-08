@@ -12,6 +12,7 @@ import {
 import { normalizePartnerCode } from '../../utils/partnerCode'
 import { playSound } from '../../services/sound/audio'
 import { normalizeAdventure } from '../../services/firebase/adventure'
+import { ShareCodeButtons } from '../share/ShareCodeButtons'
 
 type Props = {
   open: boolean
@@ -100,6 +101,23 @@ export function FriendsHub({
         <p className="pixel-label" style={{ fontSize: 6, color: 'var(--spidey-text-dim)' }}>
           LOCATION STAYS PRIVATE — FRIENDS ONLY SEE YOU IF YOU OPT IN TO SHARE.
         </p>
+
+        <div className="pixel-inset p-3 text-center">
+          <p className="pixel-label" style={{ color: 'var(--spidey-cyan)', fontSize: 7 }}>
+            YOUR SPIDER CODE
+          </p>
+          <p
+            className="font-[family-name:var(--font-pixel)] text-base tracking-widest mt-2"
+            style={{ color: 'var(--spidey-yellow)' }}
+          >
+            {profile.partnerCode}
+          </p>
+          <ShareCodeButtons
+            code={profile.partnerCode}
+            displayName={profile.displayName}
+            compact
+          />
+        </div>
 
         {requesters.length > 0 && (
           <div className="flex flex-col gap-2">

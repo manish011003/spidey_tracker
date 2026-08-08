@@ -6,6 +6,7 @@ import { SpiderAvatar } from '../../assets/spiders/SpiderAvatar'
 import { PixelSpideySprite } from '../../assets/ui/PixelSpideySprite'
 import { PixelButton } from '../pixel/PixelButton'
 import { PixelLoader } from '../pixel/PixelLoader'
+import { ShareCodeButtons } from '../share/ShareCodeButtons'
 import { completeOnboarding } from '../../services/firebase/users'
 import { linkPartner } from '../../services/firebase/relationships'
 import { normalizePartnerCode } from '../../utils/partnerCode'
@@ -96,11 +97,6 @@ export function OnboardingFlow({ profile, onComplete }: Props) {
     } finally {
       setBusy(false)
     }
-  }
-
-  const copyCode = async () => {
-    await navigator.clipboard.writeText(profile.partnerCode)
-    playSound('click')
   }
 
   return (
@@ -317,9 +313,13 @@ export function OnboardingFlow({ profile, onComplete }: Props) {
                 >
                   {profile.partnerCode}
                 </p>
-                <PixelButton className="mt-3" variant="cyan" onClick={() => void copyCode()}>
-                  COPY CODE
-                </PixelButton>
+                <p
+                  className="font-[family-name:var(--font-readable)] text-sm mt-2"
+                  style={{ color: 'var(--spidey-text-dim)' }}
+                >
+                  Share this code so friends can join your web.
+                </p>
+                <ShareCodeButtons code={profile.partnerCode} displayName={displayName || profile.displayName} />
               </div>
               <label className="flex flex-col gap-1">
                 <span className="pixel-label">ENTER PARTNER CODE</span>
