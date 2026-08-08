@@ -174,7 +174,6 @@ export async function handleRedirectResult(): Promise<User | null> {
     return null
   } catch (error: unknown) {
     const code = authCode(error)
-    const msg = authMessage(error)
     if (isIndexedDbRace(error)) {
       console.warn('[auth] redirect IDB race — waiting onAuthStateChanged')
       return null
