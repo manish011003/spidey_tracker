@@ -95,7 +95,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setInitializing(false)
           setSigningIn(false)
 
-          // Returned from Google but session never attached (common on mobile without resolver)
+          // Redirect returned with no session (Safari Private / partitioned storage).
+          // Force popup on the next tap and tell the user clearly.
           if (isRedirectPending()) {
             if (pendingWatch) window.clearTimeout(pendingWatch)
             pendingWatch = window.setTimeout(() => {
@@ -105,9 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setReturningFromGoogle(false)
                 setSigningIn(false)
                 setInitializing(false)
-                setError('MOBILE SIGN-IN INTERRUPTED — TAP SIGN IN AGAIN')
+                setError(
+                  'SAFARI BLOCKED REDIRECT LOGIN — TAP SIGN IN AGAIN (AVOID PRIVATE TAB IF IT FAILS)',
+                )
               }
-            }, 10_000)
+            }, 4_000)
           }
           return
         }
