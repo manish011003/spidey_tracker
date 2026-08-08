@@ -96,38 +96,47 @@ export async function setLocationSharing(
   await update(ref(rtdb, `presence/${uid}`), payload)
 }
 
+function mapPresenceSnap(snap: { exists: () => boolean; val: () => unknown }): PresenceData {
+  if (!snap.exists()) return { ...EMPTY_PRESENCE }
+  const val = snap.val() as Partial<PresenceData> & { lastSeen?: number | object }
+  const lastSeen =
+    typeof val.lastSeen === 'number'
+      ? val.lastSeen
+      : val.lastSeen && typeof val.lastSeen === 'object'
+        ? Date.now()
+        : 0
+
+  return {
+    online: Boolean(val.online),
+    lastSeen,
+    locationSharingEnabled: Boolean(val.locationSharingEnabled),
+    preciseLocationEnabled: val.preciseLocationEnabled !== false,
+    latitude: typeof val.latitude === 'number' ? val.latitude : null,
+    longitude: typeof val.longitude === 'number' ? val.longitude : null,
+    accuracy: typeof val.accuracy === 'number' ? val.accuracy : null,
+    heading: typeof val.heading === 'number' ? val.heading : null,
+    speed: typeof val.speed === 'number' ? val.speed : null,
+    timestamp: typeof val.timestamp === 'number' ? val.timestamp : null,
+  }
+}
+
 export function subscribeToPresence(
   uid: string,
   callback: (data: PresenceData) => void,
+  onError?: (error: Error) => void,
 ): () => void {
   const rtdb = requireRtdb()
   const statusRef = ref(rtdb, `presence/${uid}`)
-  return onValue(statusRef, (snap) => {
-    if (!snap.exists()) {
+  return onValue(
+    statusRef,
+    (snap) => {
+      callback(mapPresenceSnap(snap))
+    },
+    (err) => {
       callback({ ...EMPTY_PRESENCE })
-      return
-    }
-    const val = snap.val() as Partial<PresenceData> & { lastSeen?: number | object }
-    const lastSeen =
-      typeof val.lastSeen === 'number'
-        ? val.lastSeen
-        : val.lastSeen && typeof val.lastSeen === 'object'
-          ? Date.now()
-          : 0
-
-    callback({
-      online: Boolean(val.online),
-      lastSeen,
-      locationSharingEnabled: Boolean(val.locationSharingEnabled),
-      preciseLocationEnabled: val.preciseLocationEnabled !== false,
-      latitude: typeof val.latitude === 'number' ? val.latitude : null,
-      longitude: typeof val.longitude === 'number' ? val.longitude : null,
-      accuracy: typeof val.accuracy === 'number' ? val.accuracy : null,
-      heading: typeof val.heading === 'number' ? val.heading : null,
-      speed: typeof val.speed === 'number' ? val.speed : null,
-      timestamp: typeof val.timestamp === 'number' ? val.timestamp : null,
-    })
-  })
+      onError?.(err instanceof Error ? err : new Error(String(err)))
+    },
+  )
 }
 
 export async function initializePresenceDoc(uid: string): Promise<void> {

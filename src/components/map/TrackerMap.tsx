@@ -191,7 +191,10 @@ function TrackerMapInner({
   }, [myPresence])
 
   const friendMarkers = useMemo(() => {
+    // Don't double-draw if someone is also the partner
+    const partnerUid = partner?.uid
     return friends
+      .filter((f) => f.uid !== partnerUid)
       .map((f) => {
         const p = friendPresence[f.uid]
         if (!p?.locationSharingEnabled) return null
@@ -208,7 +211,7 @@ function TrackerMapInner({
       weak: boolean
       pulsing: boolean
     }>
-  }, [friends, friendPresence, now])
+  }, [friends, friendPresence, now, partner?.uid])
 
   const partnerStatus = getPresenceStatus(
     Boolean(partnerPresence?.online),
@@ -258,6 +261,7 @@ function TrackerMapInner({
             signalAt={partnerPresence?.timestamp}
             lastSeen={partnerPresence?.lastSeen}
             now={now}
+            roleTag="PARTNER"
             onClick={onSpiderClick ? () => onSpiderClick(partner.uid, 'partner') : undefined}
           />
         )}
@@ -274,7 +278,7 @@ function TrackerMapInner({
             signalAt={presence.timestamp}
             lastSeen={presence.lastSeen}
             now={now}
-            labelOverride="FRIEND"
+            roleTag="FRIEND"
             onClick={onSpiderClick ? () => onSpiderClick(friend.uid, 'friend') : undefined}
           />
         ))}

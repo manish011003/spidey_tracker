@@ -44,7 +44,7 @@ export function TrackerPage() {
   const friends = useFriends(profile?.friendIds)
   const myPresence = useMyPresence(profile?.uid)
   const partnerPresence = usePartnerPresence(profile?.partnerId)
-  const friendPresence = useMultiPresence(profile?.friendIds)
+  const friendPresence = useMultiPresence(profile?.friendIds, profile?.uid)
   const location = useLocationSharing(profile?.uid, profile?.preferences)
   const { events, addEvent } = useEvents(profile?.relationshipId)
   const online = useOnlineStatus()

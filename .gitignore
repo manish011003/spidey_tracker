@@ -63,3 +63,4 @@ expandable-spider*.gif
 The Amazing Spiderman 2 Ringtone*.mp3
 .vercel
 .env*
+.env.local

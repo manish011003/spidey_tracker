@@ -428,8 +428,16 @@
   image-rendering: pixelated;
 }
 
+.map-spidey-pin__tag {
+  margin-top: 2px;
+  font-family: var(--font-pixel), monospace;
+  font-size: 5px;
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 0 #020810;
+}
+
 .map-spidey-pin__label {
-  margin-top: 4px;
+  margin-top: 2px;
   padding: 3px 6px;
   background: rgba(2, 8, 16, 0.92);
   border: 2px solid #020810;

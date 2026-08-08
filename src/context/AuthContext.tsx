@@ -76,8 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (snap.exists()) {
         const next = mapUserDoc(user.uid, snap.data() as Record<string, unknown>)
         setProfile(next)
-        void syncPartnerAccess(user.uid, next.partnerId)
-        void syncFriendAccessList(user.uid, next.friendIds ?? [])
+        // Await mirrors so friend/partner presence listeners are authorized
+        void (async () => {
+          try {
+            await syncPartnerAccess(user.uid, next.partnerId)
+            await syncFriendAccessList(user.uid, next.friendIds ?? [])
+          } catch {
+            /* rules/network — useMultiPresence retries */
+          }
+        })()
       }
     })
     return unsub

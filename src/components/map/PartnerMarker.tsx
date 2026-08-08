@@ -18,8 +18,8 @@ type Props = {
   /** Presence lastSeen (ms). */
   lastSeen?: number | null
   now?: number
-  /** Override pin caption (e.g. FRIEND). */
-  labelOverride?: string
+  /** Small role chip on pin (PARTNER / FRIEND) — signal label stays LIVE-style. */
+  roleTag?: 'PARTNER' | 'FRIEND'
   onClick?: () => void
 }
 
@@ -28,18 +28,22 @@ export function createPartnerIcon(
   pulsing: boolean,
   weak: boolean,
   signalLabel: string,
+  roleTag?: 'PARTNER' | 'FRIEND',
 ): DivIcon {
   const suit = getSuit(suitId)
   const logo = getSuitLogoUrl(suitId)
-  const labelColor = weak ? '#ffc94a' : signalLabel === 'LIVE' || signalLabel === 'FRIEND' ? '#6fc041' : '#5ce1e6'
+  const labelColor = weak ? '#ffc94a' : signalLabel === 'LIVE' ? '#6fc041' : '#5ce1e6'
   const ring = pulsing
     ? `<span class="map-spidey-pin__ring" style="border-color:${suit.primaryColor}"></span>`
+    : ''
+  const tag = roleTag
+    ? `<div class="map-spidey-pin__tag" style="color:${roleTag === 'FRIEND' ? '#5ce1e6' : '#ff9f1a'}">${roleTag}</div>`
     : ''
 
   return new DivIcon({
     className: 'spidey-marker',
-    iconSize: [100, 68],
-    iconAnchor: [50, 32],
+    iconSize: [100, 72],
+    iconAnchor: [50, 36],
     html: `<div class="map-spidey-pin map-spidey-pin--partner" style="filter:${weak ? 'grayscale(0.65) opacity(0.85)' : 'none'}">
       <div class="map-spidey-pin__orb-wrap">
         ${ring}
@@ -47,6 +51,7 @@ export function createPartnerIcon(
           <img src="${logo}" alt="" width="30" height="30" style="image-rendering:pixelated;display:block;filter:drop-shadow(1px 1px 0 #020810)" />
         </div>
       </div>
+      ${tag}
       <div class="map-spidey-pin__label" style="color:${labelColor}">${signalLabel}</div>
     </div>`,
   })
@@ -62,36 +67,36 @@ export function PartnerMarker({
   signalAt,
   lastSeen,
   now = Date.now(),
-  labelOverride,
+  roleTag,
   onClick,
 }: Props) {
-  const signalLabel =
-    labelOverride ??
-    formatSignalLabel(signalAt ?? lastSeen, {
-      weak: Boolean(weak),
-      now,
-    })
+  const signalLabel = formatSignalLabel(signalAt ?? lastSeen, {
+    weak: Boolean(weak),
+    now,
+  })
 
   const icon = useMemo(
-    () => createPartnerIcon(suitId, Boolean(pulsing), Boolean(weak), signalLabel),
-    [suitId, pulsing, weak, signalLabel],
+    () => createPartnerIcon(suitId, Boolean(pulsing), Boolean(weak), signalLabel, roleTag),
+    [suitId, pulsing, weak, signalLabel, roleTag],
   )
 
   return (
     <Marker
       position={position}
       icon={icon}
-      eventHandlers={
-        onClick
-          ? {
-              click: () => onClick(),
-            }
-          : undefined
-      }
+      eventHandlers={{
+        click: () => onClick?.(),
+      }}
     >
       <Popup className="spidey-popup">
         <div className="spidey-popup__body">
           <strong>{name}</strong>
+          {roleTag ? (
+            <>
+              <br />
+              {roleTag}
+            </>
+          ) : null}
           <br />
           Spider: {spiderId} / {suitId}
           <br />
@@ -100,6 +105,12 @@ export function PartnerMarker({
             <>
               <br />
               Signal stale — last known broadcast
+            </>
+          ) : null}
+          {onClick ? (
+            <>
+              <br />
+              Tap pin for nudge / find
             </>
           ) : null}
         </div>
