@@ -48,25 +48,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    void handleRedirectResult().catch(() => undefined)
+    let unsub: (() => void) | undefined
+    let cancelled = false
 
-    const unsub = subscribeToAuth(async (next) => {
-      setUser(next)
-      if (!next) {
-        setProfile(null)
-        setLoading(false)
-        return
-      }
+    void (async () => {
+      // Finish redirect sign-in before attaching the auth listener
       try {
-        const shell = await ensureUserShell(next)
-        setProfile(shell)
-      } catch {
-        setError('FAILED TO LOAD SPIDER PROFILE')
-      } finally {
-        setLoading(false)
+        await handleRedirectResult()
+      } catch (e) {
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : 'IDENTITY VERIFICATION FAILED'
+          setError(msg)
+        }
       }
-    })
-    return unsub
+      if (cancelled) return
+
+      unsub = subscribeToAuth(async (next) => {
+        setUser(next)
+        if (!next) {
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+        try {
+          const shell = await ensureUserShell(next)
+          if (!cancelled) setProfile(shell)
+        } catch {
+          if (!cancelled) setError('FAILED TO LOAD SPIDER PROFILE')
+        } finally {
+          if (!cancelled) setLoading(false)
+        }
+      })
+    })()
+
+    return () => {
+      cancelled = true
+      unsub?.()
+    }
   }, [])
 
   useEffect(() => {
@@ -95,10 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     try {
       await signInWithGoogle()
+      // Popup success — loading clears when auth listener loads profile
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'IDENTITY VERIFICATION FAILED'
-      if (msg !== 'REDIRECT_STARTED') setError(msg)
-    } finally {
+      if (msg === 'REDIRECT_STARTED') {
+        // Full-page navigation away; keep loading state
+        return
+      }
+      setError(msg)
       setLoading(false)
     }
   }, [])

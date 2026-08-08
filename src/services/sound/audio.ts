@@ -7,9 +7,10 @@ let ringtoneEl: HTMLAudioElement | null = null
 
 const RINGTONE_URL = '/sounds/spider-ringtone.mp3'
 
-function getCtx(): AudioContext | null {
+function getCtx(create = false): AudioContext | null {
   if (typeof window === 'undefined') return null
   if (!ctx) {
+    if (!create) return null
     const AudioCtx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -37,20 +38,22 @@ export function isSoundEnabled(): boolean {
 }
 
 export async function unlockAudio(): Promise<void> {
-  const audio = getCtx()
+  // Only create AudioContext from a user gesture (sign-in / toggle sound)
+  const audio = getCtx(true)
   if (!audio) return
-  if (audio.state === 'suspended') await audio.resume()
-  unlocked = true
-  // Warm the ringtone element under a user gesture
-  const ring = getRingtone()
-  if (ring) {
-    ring.load()
+  try {
+    if (audio.state === 'suspended') await audio.resume()
+    unlocked = true
+    const ring = getRingtone()
+    if (ring) ring.load()
+  } catch {
+    // Autoplay policy — ignore until next gesture
   }
 }
 
 function beep(freq: number, duration: number, type: OscillatorType = 'square', gain = 0.04): void {
   if (!enabled || !unlocked) return
-  const audio = getCtx()
+  const audio = getCtx(false)
   if (!audio) return
 
   const osc = audio.createOscillator()
@@ -69,7 +72,16 @@ function beep(freq: number, duration: number, type: OscillatorType = 'square', g
 
 /** Spidey ringtone — used for first pair + partner nudge. */
 export async function playRingtone(): Promise<void> {
-  await unlockAudio()
+  if (!enabled) return
+  // Resume context only if already created by a gesture
+  const audio = getCtx(false)
+  if (audio?.state === 'suspended') {
+    try {
+      await audio.resume()
+    } catch {
+      /* ignore */
+    }
+  }
   const ring = getRingtone()
   if (!ring) return
   try {
@@ -77,7 +89,7 @@ export async function playRingtone(): Promise<void> {
     ring.volume = 0.85
     await ring.play()
   } catch {
-    // Autoplay may still be blocked for the receiving partner until they interact
+    // Autoplay may still be blocked until the user interacts
   }
 }
 

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { SpiderMaskIcon } from '../../assets/spiders/SpiderAvatar'
 import { PixelButton } from './PixelButton'
 import { PixelLoader } from './PixelLoader'
-import { playSound, unlockAudio } from '../../services/sound/audio'
 
 type Props = {
   onSignIn: () => void
@@ -31,7 +30,7 @@ export function BootScreen({
 
   useEffect(() => {
     if (skipAnimation) return
-    void unlockAudio().then(() => playSound('boot'))
+    // Don't create AudioContext here — browsers block it until a click
     let i = 0
     const id = window.setInterval(() => {
       i += 1
