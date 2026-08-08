@@ -1,6 +1,6 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import { getAuth, type Auth } from 'firebase/auth'
-import { getFirestore, type Firestore } from 'firebase/firestore'
+import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore'
 import { getDatabase, type Database } from 'firebase/database'
 
 const firebaseConfig = {
@@ -29,6 +29,13 @@ let rtdb: Database | null = null
 if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig)
   auth = getAuth(app)
+  // Google accounts without a photo (and optional fields) send `undefined`,
+  // which Firestore rejects unless this is enabled — breaks new-user signup.
+  try {
+    initializeFirestore(app, { ignoreUndefinedProperties: true })
+  } catch {
+    /* already initialized in HMR / strict remount */
+  }
   db = getFirestore(app)
   rtdb = getDatabase(app)
 }

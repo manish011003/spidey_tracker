@@ -119,23 +119,56 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return mapUserDoc(uid, snap.data() as Record<string, unknown>)
 }
 
+async function claimPartnerCode(uid: string, preferred?: string): Promise<string> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const code = attempt === 0 && preferred ? preferred : generatePartnerCode()
+    try {
+      await registerPartnerCode(code, uid)
+      return code
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('FAILED TO CLAIM SPIDER CODE')
+}
+
 export async function ensureUserShell(user: User): Promise<UserProfile> {
   const existing = await getUserProfile(user.uid)
-  if (existing) return existing
+  if (existing) {
+    // Backfill partnerCodes index if an earlier signup wrote the user doc but failed here
+    try {
+      await registerPartnerCode(existing.partnerCode, user.uid)
+    } catch {
+      const fresh = await claimPartnerCode(user.uid)
+      if (fresh !== existing.partnerCode) {
+        const db = requireDb()
+        await updateDoc(doc(db, 'users', user.uid), {
+          partnerCode: fresh,
+          updatedAt: serverTimestamp(),
+        })
+        return { ...existing, partnerCode: fresh }
+      }
+    }
+    return existing
+  }
 
   const db = requireDb()
   const now = Date.now()
+  const partnerCode = generatePartnerCode()
   const profile: UserProfile = {
     uid: user.uid,
-    displayName: user.displayName ?? 'Spider',
+    displayName: user.displayName?.trim() || 'Spider',
     email: user.email ?? '',
-    photoURL: user.photoURL ?? undefined,
+    ...(user.photoURL ? { photoURL: user.photoURL } : {}),
     role: 'boyfriend',
     spiderId: 'classic',
     suitId: 'classic',
     statusMessage: 'WEB SENSORS ONLINE',
     partnerId: null,
-    partnerCode: generatePartnerCode(),
+    partnerCode,
     relationshipId: null,
     friendIds: [],
     incomingFriendRequests: [],
@@ -147,12 +180,37 @@ export async function ensureUserShell(user: User): Promise<UserProfile> {
     adventure: emptyAdventure(),
   }
 
+  // Explicit payload — never write `undefined` (breaks accounts with no Google photo)
   await setDoc(doc(db, 'users', user.uid), {
-    ...profile,
+    uid: profile.uid,
+    displayName: profile.displayName,
+    email: profile.email,
+    ...(user.photoURL ? { photoURL: user.photoURL } : {}),
+    role: profile.role,
+    spiderId: profile.spiderId,
+    suitId: profile.suitId,
+    statusMessage: profile.statusMessage,
+    partnerId: null,
+    partnerCode: profile.partnerCode,
+    relationshipId: null,
+    friendIds: [],
+    incomingFriendRequests: [],
+    outgoingFriendRequests: [],
+    onboardingComplete: false,
+    preferences: profile.preferences,
+    adventure: profile.adventure,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-  await registerPartnerCode(profile.partnerCode, user.uid)
+
+  const claimed = await claimPartnerCode(user.uid, partnerCode)
+  if (claimed !== partnerCode) {
+    await updateDoc(doc(db, 'users', user.uid), {
+      partnerCode: claimed,
+      updatedAt: serverTimestamp(),
+    })
+    profile.partnerCode = claimed
+  }
 
   return profile
 }
@@ -172,14 +230,19 @@ export async function completeOnboarding(
   starter.xp = 20
   starter.level = levelFromXp(20)
   starter.achievements = ['first_web']
-  await updateDoc(doc(db, 'users', uid), {
-    ...data,
+  const payload: Record<string, unknown> = {
+    role: data.role,
+    spiderId: data.spiderId,
+    suitId: data.suitId,
+    displayName: data.displayName,
     onboardingComplete: true,
     adventure: starter,
     incomingFriendRequests: [],
     outgoingFriendRequests: [],
     updatedAt: serverTimestamp(),
-  })
+  }
+  if (data.nickname) payload.nickname = data.nickname
+  await updateDoc(doc(db, 'users', uid), payload)
 }
 
 export async function updatePreferences(

@@ -45,12 +45,17 @@ export function OnboardingFlow({ profile, onComplete }: Props) {
         spiderId,
         suitId,
         displayName: displayName.trim(),
-        nickname: nickname.trim() || undefined,
+        ...(nickname.trim() ? { nickname: nickname.trim() } : {}),
       })
       setStep(5)
       playSound('signal')
-    } catch {
-      setError('FAILED TO SAVE SPIDER PROFILE')
+    } catch (e) {
+      console.error('[onboarding] save failed', e)
+      setError(
+        e instanceof Error && e.message.includes('permission')
+          ? 'SAVE BLOCKED — PERMISSION DENIED'
+          : 'FAILED TO SAVE SPIDER PROFILE',
+      )
     } finally {
       setBusy(false)
     }

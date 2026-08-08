@@ -72,9 +72,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         try {
           const shell = await ensureUserShell(next)
-          if (!cancelled) setProfile(shell)
-        } catch {
-          if (!cancelled) setError('FAILED TO LOAD SPIDER PROFILE')
+          if (!cancelled) {
+            setProfile(shell)
+            setError(null)
+          }
+        } catch (e) {
+          console.error('[auth] ensureUserShell failed', e)
+          if (!cancelled) {
+            const raw = e instanceof Error ? e.message : String(e)
+            const code = (e as { code?: string })?.code
+            if (code === 'permission-denied' || raw.includes('permission')) {
+              setError('PROFILE PERMISSION DENIED — CHECK FIRESTORE RULES')
+            } else if (raw.includes('Unsupported field value') || raw.includes('undefined')) {
+              setError('PROFILE WRITE FAILED — RETRY SIGN-IN')
+            } else {
+              setError('FAILED TO LOAD SPIDER PROFILE')
+            }
+          }
         } finally {
           if (!cancelled) setLoading(false)
         }

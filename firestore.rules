@@ -29,8 +29,11 @@ service cloud.firestore {
     match /users/{userId} {
       // Any signed-in spider can read onboarded profiles (needed for code lookup /
       // friend requests even when the other user already has a partner).
+      // Guard resource != null so missing docs don't trip resource.data access.
       allow read: if isSelf(userId)
-        || (isSignedIn() && resource.data.onboardingComplete == true);
+        || (isSignedIn()
+          && resource != null
+          && resource.data.onboardingComplete == true);
 
       allow create: if isSelf(userId)
         && request.resource.data.uid == userId
