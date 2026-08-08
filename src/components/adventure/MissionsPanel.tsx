@@ -30,7 +30,7 @@ export function MissionsPanel({ open, profile, onClose, onOpenQuiz, onOpenDiscov
     <PixelModal open={open} title="MISSION BOARD" onClose={onClose} wide>
       <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
         <p className="pixel-label" style={{ fontSize: 6, color: 'var(--spidey-text-dim)' }}>
-          DAILY / WEEKLY RESET · QUIZ & DISCOVERY FEED THE BOARD
+          DAILY / WEEKLY RESET · LANDMARK QUESTS SPAWN NEAR YOU
         </p>
         {MISSIONS.map((m) => {
           const progress = adv.missionProgress[m.id] ?? 0

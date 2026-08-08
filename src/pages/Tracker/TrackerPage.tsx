@@ -8,6 +8,7 @@ import type { NetworkSpider } from '../../components/tracker/TrackerHeader'
 import { removeFriend } from '../../services/firebase/friends'
 import type { PresenceData, SharedEvent, UserProfile } from '../../types'
 import { useLocationSharing } from '../../hooks/useLocationSharing'
+import { useNearbyDiscoveries } from '../../hooks/useNearbyDiscoveries'
 import { useEvents } from '../../hooks/useEvents'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { useNow } from '../../hooks/useNow'
@@ -46,6 +47,11 @@ export function TrackerPage() {
   const partnerPresence = usePartnerPresence(profile?.partnerId)
   const friendPresence = useMultiPresence(profile?.friendIds, profile?.uid)
   const location = useLocationSharing(profile?.uid, profile?.preferences)
+  const questLat =
+    myPresence.latitude ?? location.lastLocal?.latitude ?? null
+  const questLng =
+    myPresence.longitude ?? location.lastLocal?.longitude ?? null
+  const nearbyDiscoveries = useNearbyDiscoveries(questLat, questLng)
   const { events, addEvent } = useEvents(profile?.relationshipId)
   const online = useOnlineStatus()
   const now = useNow(1000)
@@ -435,6 +441,7 @@ export function TrackerPage() {
             flyTo={flyTo}
             onEventClick={setSelectedEvent}
             onSpiderClick={openSpiderById}
+            discoveries={nearbyDiscoveries.discoveries}
             discoveredIds={adventure?.discoveries ?? []}
             showDiscoveries
             onDiscoveryClick={() => setDiscoveriesOpen(true)}
@@ -555,8 +562,11 @@ export function TrackerPage() {
       <DiscoveriesPanel
         open={discoveriesOpen}
         profile={profile}
-        myLat={myPresence.latitude}
-        myLng={myPresence.longitude}
+        discoveries={nearbyDiscoveries.discoveries}
+        loading={nearbyDiscoveries.loading}
+        source={nearbyDiscoveries.source}
+        myLat={nearbyDiscoveries.lat ?? questLat}
+        myLng={nearbyDiscoveries.lng ?? questLng}
         onClose={() => setDiscoveriesOpen(false)}
         onChanged={() => void refreshProfile()}
         onFlyTo={(lat, lng) => setFlyTo({ lat, lng, zoom: 15, nonce: Date.now() })}

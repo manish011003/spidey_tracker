@@ -9,7 +9,7 @@ import { DiscoveryMarker } from './DiscoveryMarker'
 import { PixelZoomControl } from './PixelZoomControl'
 import { getPresenceStatus } from '../../utils/geo'
 import { PixelButton } from '../pixel/PixelButton'
-import { DISCOVERIES } from '../../data/adventure'
+import type { DiscoveryDef } from '../../data/adventure'
 
 const TILE_URL =
   (import.meta.env.VITE_MAP_TILE_URL as string | undefined) ??
@@ -36,6 +36,7 @@ type Props = {
   flyTo: FlyTarget
   onEventClick: (event: SharedEvent) => void
   onSpiderClick?: (uid: string, kind: 'partner' | 'friend') => void
+  discoveries?: DiscoveryDef[]
   discoveredIds?: string[]
   showDiscoveries?: boolean
   onDiscoveryClick?: () => void
@@ -171,6 +172,7 @@ function TrackerMapInner({
   flyTo,
   onEventClick,
   onSpiderClick,
+  discoveries = [],
   discoveredIds = [],
   showDiscoveries = true,
   onDiscoveryClick,
@@ -288,7 +290,7 @@ function TrackerMapInner({
         ))}
 
         {showDiscoveries &&
-          DISCOVERIES.map((d) => (
+          discoveries.map((d) => (
             <DiscoveryMarker
               key={d.id}
               discovery={d}

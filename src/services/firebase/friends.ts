@@ -54,6 +54,15 @@ async function linkFriends(me: UserProfile, friend: UserProfile): Promise<void> 
   await bumpMission(me.uid, 'weekly_friends', 1)
 }
 
+function mapFriendError(e: unknown): Error {
+  const raw = e instanceof Error ? e.message : String(e)
+  if (/permission|insufficient/i.test(raw)) {
+    return new Error('FIREBASE RULES BLOCKED THIS — REDEPLOY firestore.rules')
+  }
+  if (e instanceof Error) return e
+  return new Error(raw || 'FRIEND REQUEST FAILED')
+}
+
 /** Send a friend request by spider code (not auto-link). */
 export async function sendFriendRequest(
   currentUser: UserProfile,
@@ -63,32 +72,58 @@ export async function sendFriendRequest(
   if (!isValidPartnerCodeFormat(code)) throw new Error('INVALID SPIDER CODE FORMAT')
   if (code === currentUser.partnerCode) throw new Error('CANNOT ADD YOURSELF')
 
-  const friend = await findUserByPartnerCode(code)
+  let friend: UserProfile | null
+  try {
+    friend = await findUserByPartnerCode(code)
+  } catch (e) {
+    throw mapFriendError(e)
+  }
   if (!friend) throw new Error('SPIDER SIGNAL NOT FOUND — INVALID CODE')
   if (!friend.onboardingComplete) throw new Error('FRIEND HAS NOT COMPLETED SETUP')
   if (friend.uid === currentUser.partnerId) throw new Error('ALREADY YOUR PARTNER')
   if (currentUser.friendIds.includes(friend.uid)) throw new Error('ALREADY FRIENDS')
   if (currentUser.friendIds.length >= MAX_FRIENDS) throw new Error('FRIEND WEB FULL')
-  if (currentUser.outgoingFriendRequests.includes(friend.uid)) throw new Error('REQUEST ALREADY SENT')
-  if (currentUser.incomingFriendRequests.includes(friend.uid)) {
-    // They already requested you — accept
+  if ((currentUser.outgoingFriendRequests ?? []).includes(friend.uid)) {
+    throw new Error('REQUEST ALREADY SENT')
+  }
+  if ((currentUser.incomingFriendRequests ?? []).includes(friend.uid)) {
     await acceptFriendRequest(currentUser, friend.uid)
     return friend
   }
 
   const db = requireDb()
-  await runTransaction(db, async (tx) => {
-    const meRef = doc(db, 'users', currentUser.uid)
-    const friendRef = doc(db, 'users', friend.uid)
-    tx.update(meRef, {
-      outgoingFriendRequests: arrayUnion(friend.uid),
-      updatedAt: serverTimestamp(),
+  try {
+    await runTransaction(db, async (tx) => {
+      const meRef = doc(db, 'users', currentUser.uid)
+      const friendRef = doc(db, 'users', friend!.uid)
+      const meSnap = await tx.get(meRef)
+      const friendSnap = await tx.get(friendRef)
+      if (!meSnap.exists() || !friendSnap.exists()) throw new Error('SPIDER PROFILE MISSING')
+
+      const meData = meSnap.data()
+      const friendData = friendSnap.data()
+      const meOutgoing = (meData.outgoingFriendRequests as string[] | undefined) ?? []
+      const theirIncoming = (friendData.incomingFriendRequests as string[] | undefined) ?? []
+      const meFriends = (meData.friendIds as string[] | undefined) ?? []
+      if (meFriends.includes(friend!.uid)) throw new Error('ALREADY FRIENDS')
+      if (meOutgoing.includes(friend!.uid) || theirIncoming.includes(currentUser.uid)) {
+        throw new Error('REQUEST ALREADY SENT')
+      }
+
+      // Self: only outgoing (+ updatedAt) — covered by isSelf
+      tx.update(meRef, {
+        outgoingFriendRequests: arrayUnion(friend!.uid),
+        updatedAt: serverTimestamp(),
+      })
+      // Peer: ONLY incoming + updatedAt — rules require hasOnly those keys
+      tx.update(friendRef, {
+        incomingFriendRequests: arrayUnion(currentUser.uid),
+        updatedAt: serverTimestamp(),
+      })
     })
-    tx.update(friendRef, {
-      incomingFriendRequests: arrayUnion(currentUser.uid),
-      updatedAt: serverTimestamp(),
-    })
-  })
+  } catch (e) {
+    throw mapFriendError(e)
+  }
 
   return friend
 }

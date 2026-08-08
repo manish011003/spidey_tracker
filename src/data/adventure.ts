@@ -103,7 +103,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'explore_park',
     title: 'PARK PATROL',
-    description: 'Discover a park Easter egg.',
+    description: 'Claim a park signal near your location.',
     category: 'exploration',
     target: 1,
     xp: 60,
@@ -127,10 +127,18 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'discovery_any',
     title: 'CLUE SEEKER',
-    description: 'Unlock any hidden discovery.',
+    description: 'Claim any nearby landmark quest.',
     category: 'discovery',
     target: 1,
     xp: 70,
+  },
+  {
+    id: 'explore_nearby_3',
+    title: 'SECTOR SWEEP',
+    description: 'Claim 3 landmarks in your current sector.',
+    category: 'exploration',
+    target: 3,
+    xp: 110,
   },
 ]
 

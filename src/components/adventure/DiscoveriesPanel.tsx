@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react'
 import { PixelModal } from '../pixel/PixelModal'
 import { PixelButton } from '../pixel/PixelButton'
-import { DISCOVERIES } from '../../data/adventure'
+import type { DiscoveryDef } from '../../data/adventure'
 import type { UserProfile } from '../../types'
 import { normalizeAdventure, recordDiscovery } from '../../services/firebase/adventure'
-import { haversineDistanceKm } from '../../utils/geo'
+import { sortDiscoveriesByDistance } from '../../services/discoveries/nearbyDiscoveries'
 import { playSound } from '../../services/sound/audio'
+import { formatDistance, haversineDistanceKm } from '../../utils/geo'
 
 type Props = {
   open: boolean
   profile: UserProfile
+  discoveries: DiscoveryDef[]
+  loading?: boolean
+  source?: 'osm' | 'local' | 'none'
   myLat: number | null
   myLng: number | null
   onClose: () => void
@@ -20,6 +24,9 @@ type Props = {
 export function DiscoveriesPanel({
   open,
   profile,
+  discoveries,
+  loading,
+  source = 'none',
   myLat,
   myLng,
   onClose,
@@ -30,21 +37,25 @@ export function DiscoveriesPanel({
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const tryClaim = async (id: string) => {
-    const d = DISCOVERIES.find((x) => x.id === id)
-    if (!d || myLat == null || myLng == null) {
+  const ranked = useMemo(() => {
+    if (myLat == null || myLng == null) return discoveries.map((d) => ({ ...d, distanceM: 0 }))
+    return sortDiscoveriesByDistance(discoveries, myLat, myLng)
+  }, [discoveries, myLat, myLng])
+
+  const tryClaim = async (d: DiscoveryDef) => {
+    if (myLat == null || myLng == null) {
       setMsg('SHARE LOCATION & REACH THE ZONE')
       return
     }
-    const distM = haversineDistanceKm(myLat, myLng, d.latitude, d.longitude) * 1000
-    if (distM > d.radiusM) {
-      setMsg(`TOO FAR — ${Math.round(distM)}m (need ≤${d.radiusM}m)`)
+    const exactM = Math.round(haversineDistanceKm(myLat, myLng, d.latitude, d.longitude) * 1000)
+    if (exactM > d.radiusM) {
+      setMsg(`TOO FAR — ${exactM}m (need ≤${d.radiusM}m)`)
       playSound('error')
       return
     }
-    setBusy(id)
+    setBusy(d.id)
     try {
-      const result = await recordDiscovery(profile.uid, d.id, d.xp, d.unlockSuit)
+      const result = await recordDiscovery(profile.uid, d.id, d.xp, d.unlockSuit, d.category)
       playSound('pair')
       setMsg(result.xpGained ? `DISCOVERED +${result.xpGained} XP` : 'ALREADY FOUND')
       onChanged()
@@ -57,25 +68,50 @@ export function DiscoveriesPanel({
   }
 
   return (
-    <PixelModal open={open} title="HIDDEN WEBS" onClose={onClose} wide>
+    <PixelModal open={open} title="NEARBY QUESTS" onClose={onClose} wide>
       <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
         <p className="pixel-label" style={{ fontSize: 6, color: 'var(--spidey-text-dim)' }}>
-          FOLLOW CLUES TO PUBLIC PLACES. OPT-IN LOCATION REQUIRED TO CLAIM.
+          LANDMARKS NEAR YOU — UPDATES AS YOU MOVE. SHARE LOCATION TO CLAIM.
         </p>
-        {DISCOVERIES.map((d) => {
+        {myLat == null || myLng == null ? (
+          <div className="pixel-inset p-3 text-center">
+            <p className="pixel-label" style={{ color: 'var(--spidey-yellow)', fontSize: 8 }}>
+              NO LOCATION SIGNAL
+            </p>
+            <p
+              className="font-[family-name:var(--font-readable)] text-base mt-2"
+              style={{ color: 'var(--spidey-text-dim)' }}
+            >
+              Turn on location sharing to spawn nearby park / cafe / temple / mall quests.
+            </p>
+          </div>
+        ) : (
+          <p className="pixel-label" style={{ fontSize: 6, color: 'var(--spidey-cyan)' }}>
+            {loading ? 'SCANNING SECTOR…' : `${ranked.length} SIGNALS`}
+            {source === 'osm' ? ' · LIVE MAP DATA' : source === 'local' ? ' · SECTOR NODES' : ''}
+          </p>
+        )}
+
+        {ranked.map((d) => {
           const found = adv.discoveries.includes(d.id)
           return (
             <div key={d.id} className="pixel-inset p-2 flex flex-col gap-1">
-              <div className="flex justify-between">
-                <p className="pixel-label" style={{ fontSize: 7, color: found ? 'var(--spidey-green)' : 'var(--spidey-yellow)' }}>
+              <div className="flex justify-between gap-2">
+                <p
+                  className="pixel-label"
+                  style={{ fontSize: 7, color: found ? 'var(--spidey-green)' : 'var(--spidey-yellow)' }}
+                >
                   {found ? '✓ ' : '? '}
                   {found ? d.name : d.category.toUpperCase() + ' SIGNAL'}
                 </p>
-                <p className="pixel-label" style={{ fontSize: 6, color: 'var(--spidey-cyan)' }}>
-                  +{d.xp}XP
+                <p className="pixel-label shrink-0" style={{ fontSize: 6, color: 'var(--spidey-cyan)' }}>
+                  {myLat != null ? formatDistance(d.distanceM / 1000) : '—'} · +{d.xp}XP
                 </p>
               </div>
-              <p className="font-[family-name:var(--font-readable)] text-sm" style={{ color: 'var(--spidey-text)' }}>
+              <p
+                className="font-[family-name:var(--font-readable)] text-sm"
+                style={{ color: 'var(--spidey-text)' }}
+              >
                 {d.clue}
               </p>
               <div className="flex gap-2 mt-1">
@@ -92,8 +128,8 @@ export function DiscoveriesPanel({
                 </PixelButton>
                 <PixelButton
                   className="flex-1 !text-[6px]"
-                  disabled={found || busy === d.id}
-                  onClick={() => void tryClaim(d.id)}
+                  disabled={found || busy === d.id || myLat == null}
+                  onClick={() => void tryClaim(d)}
                 >
                   {found ? 'FOUND' : busy === d.id ? '...' : 'CLAIM HERE'}
                 </PixelButton>

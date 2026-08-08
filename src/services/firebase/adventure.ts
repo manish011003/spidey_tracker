@@ -216,7 +216,13 @@ export async function recordQuizResult(
   return awardXp(uid, xp, { achievementIds })
 }
 
-export async function recordDiscovery(uid: string, discoveryId: string, xp: number, unlockSuit?: SuitId) {
+export async function recordDiscovery(
+  uid: string,
+  discoveryId: string,
+  xp: number,
+  unlockSuit?: SuitId,
+  category?: string,
+) {
   const profile = await getUserProfile(uid)
   if (!profile) throw new Error('PROFILE NOT FOUND')
   let adv = normalizeAdventure(profile.adventure)
@@ -228,9 +234,12 @@ export async function recordDiscovery(uid: string, discoveryId: string, xp: numb
     adv.unlockedSuits = [...adv.unlockedSuits, unlockSuit]
   }
   await saveAdventure(uid, adv)
-  await bumpMission(uid, 'explore_park', 1)
+  if (category === 'park') await bumpMission(uid, 'explore_park', 1)
   await bumpMission(uid, 'discovery_any', 1)
-  return awardXp(uid, xp, { achievementIds: ['explorer_1'] })
+  await bumpMission(uid, 'explore_nearby_3', 1)
+  const achievementIds: AchievementId[] = ['explorer_1']
+  if (adv.discoveries.length >= 5) achievementIds.push('explorer_5')
+  return awardXp(uid, xp, { achievementIds })
 }
 
 export async function equipSuit(uid: string, suitId: SuitId): Promise<void> {
