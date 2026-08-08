@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -16,10 +17,9 @@ import {
   signOut as firebaseSignOut,
   subscribeToAuth,
 } from '../services/firebase/auth'
-import { ensureUserShell, getUserProfile } from '../services/firebase/users'
+import { ensureUserShell, getUserProfile, mapUserDoc } from '../services/firebase/users'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { requireDb } from '../services/firebase/config'
-import { mapUserDoc } from '../services/firebase/users'
 import { syncFriendAccessList, syncPartnerAccess } from '../services/firebase/presence'
 
 type AuthContextValue = {
@@ -36,15 +36,31 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+function formatShellError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e)
+  const code = (e as { code?: string })?.code
+  if (code === 'permission-denied' || raw.toLowerCase().includes('permission')) {
+    return 'PROFILE PERMISSION DENIED — CHECK FIRESTORE RULES'
+  }
+  if (raw.includes('Unsupported field value') || raw.includes('undefined')) {
+    return 'PROFILE WRITE FAILED — RETRY SIGN-IN'
+  }
+  return `FAILED TO LOAD SPIDER PROFILE${code ? ` (${code})` : ''}`
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [loading, setLoading] = useState(true)
+  /** First auth + profile hydrate */
+  const [initializing, setInitializing] = useState(true)
+  /** Google popup / redirect in progress (button only) */
+  const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const shellGen = useRef(0)
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
-      setLoading(false)
+      setInitializing(false)
       return
     }
 
@@ -52,57 +68,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     void (async () => {
-      // Finish redirect sign-in before attaching the auth listener
       try {
         await handleRedirectResult()
       } catch (e) {
         if (!cancelled) {
-          const msg = e instanceof Error ? e.message : 'IDENTITY VERIFICATION FAILED'
-          setError(msg)
+          setError(e instanceof Error ? e.message : 'IDENTITY VERIFICATION FAILED')
         }
       }
       if (cancelled) return
 
-      unsub = subscribeToAuth(async (next) => {
+      unsub = subscribeToAuth((next) => {
+        const gen = ++shellGen.current
         setUser(next)
+
         if (!next) {
           setProfile(null)
-          setLoading(false)
+          setInitializing(false)
+          setSigningIn(false)
           return
         }
-        try {
-          const shell = await ensureUserShell(next)
-          if (!cancelled) {
+
+        void (async () => {
+          try {
+            const shell = await ensureUserShell(next)
+            if (cancelled || gen !== shellGen.current) return
             setProfile(shell)
             setError(null)
-          }
-        } catch (e) {
-          console.error('[auth] ensureUserShell failed', e)
-          // Partial signup: user doc may exist even if code index failed
-          try {
-            const fallback = await getUserProfile(next.uid)
-            if (fallback && !cancelled) {
-              setProfile(fallback)
-              setError(null)
-              return
+          } catch (e) {
+            console.error('[auth] ensureUserShell failed', e)
+            try {
+              const fallback = await getUserProfile(next.uid)
+              if (fallback && !cancelled && gen === shellGen.current) {
+                setProfile(fallback)
+                setError(null)
+                return
+              }
+            } catch {
+              /* ignore */
             }
-          } catch {
-            /* ignore */
-          }
-          if (!cancelled) {
-            const raw = e instanceof Error ? e.message : String(e)
-            const code = (e as { code?: string })?.code
-            if (code === 'permission-denied' || raw.toLowerCase().includes('permission')) {
-              setError('PROFILE PERMISSION DENIED — CHECK FIRESTORE RULES')
-            } else if (raw.includes('Unsupported field value') || raw.includes('undefined')) {
-              setError('PROFILE WRITE FAILED — RETRY SIGN-IN')
-            } else {
-              setError(`FAILED TO LOAD SPIDER PROFILE${code ? ` (${code})` : ''}`)
+            if (!cancelled && gen === shellGen.current) {
+              setError(formatShellError(e))
+            }
+          } finally {
+            if (!cancelled && gen === shellGen.current) {
+              setInitializing(false)
+              setSigningIn(false)
             }
           }
-        } finally {
-          if (!cancelled) setLoading(false)
-        }
+        })()
       })
     })()
 
@@ -115,45 +128,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user || !isFirebaseConfigured) return
     const db = requireDb()
-    const unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-      if (snap.exists()) {
-        const next = mapUserDoc(user.uid, snap.data() as Record<string, unknown>)
-        setProfile(next)
-        // Await mirrors so friend/partner presence listeners are authorized
-        void (async () => {
-          try {
-            await syncPartnerAccess(user.uid, next.partnerId)
-            await syncFriendAccessList(user.uid, next.friendIds ?? [])
-          } catch {
-            /* rules/network — useMultiPresence retries */
-          }
-        })()
-      }
-    })
+    const unsub = onSnapshot(
+      doc(db, 'users', user.uid),
+      (snap) => {
+        if (snap.exists()) {
+          const next = mapUserDoc(user.uid, snap.data() as Record<string, unknown>)
+          setProfile(next)
+          void (async () => {
+            try {
+              await syncPartnerAccess(user.uid, next.partnerId)
+              await syncFriendAccessList(user.uid, next.friendIds ?? [])
+            } catch {
+              /* rules/network */
+            }
+          })()
+        }
+      },
+      (err) => {
+        console.error('[auth] profile snapshot error', err)
+        setError('PROFILE SYNC FAILED — CHECK CONNECTION / RULES')
+      },
+    )
     return unsub
   }, [user])
 
   const signIn = useCallback(async () => {
     setError(null)
-    setLoading(true)
+    setSigningIn(true)
     try {
       await signInWithGoogle()
-      // Popup success — loading clears when auth listener loads profile
+      // Popup success — profile hydrate continues in onAuthStateChanged
+      // Keep signingIn until shell loads (cleared there). Safety timeout below.
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'IDENTITY VERIFICATION FAILED'
       if (msg === 'REDIRECT_STARTED') {
-        // Full-page navigation away; keep loading state
+        // Full-page navigation; leave signingIn true until unload
         return
       }
       setError(msg)
-      setLoading(false)
+      setSigningIn(false)
+      return
     }
+    // If auth listener is slow, don't trap the button forever
+    window.setTimeout(() => setSigningIn(false), 20_000)
   }, [])
 
   const signOut = useCallback(async () => {
-    await firebaseSignOut()
-    setProfile(null)
-    setUser(null)
+    setError(null)
+    setSigningIn(false)
+    try {
+      await firebaseSignOut()
+    } finally {
+      setProfile(null)
+      setUser(null)
+      setInitializing(false)
+    }
   }, [])
 
   const refreshProfile = useCallback(async () => {
@@ -161,6 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const p = await getUserProfile(user.uid)
     setProfile(p)
   }, [user])
+
+  const loading = initializing || signingIn
 
   const value = useMemo(
     () => ({

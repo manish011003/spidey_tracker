@@ -119,42 +119,40 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return mapUserDoc(uid, snap.data() as Record<string, unknown>)
 }
 
-/** Best-effort: never block login if the code index is flaky. */
-async function ensurePartnerCodeIndex(uid: string, currentCode: string): Promise<string> {
-  const code = currentCode || generatePartnerCode()
-  try {
-    await registerPartnerCode(code, uid)
-    return code
-  } catch (err) {
-    console.warn('[users] partner code register failed, retrying', err)
-  }
-
-  for (let i = 0; i < 5; i++) {
-    const next = generatePartnerCode()
+/** Best-effort code index — never await this on the login critical path. */
+function queuePartnerCodeIndex(uid: string, currentCode: string): void {
+  void (async () => {
+    const code = currentCode || generatePartnerCode()
     try {
-      await registerPartnerCode(next, uid)
-      if (next !== code) {
-        const db = requireDb()
-        await updateDoc(doc(db, 'users', uid), {
-          partnerCode: next,
-          updatedAt: serverTimestamp(),
-        })
-      }
-      return next
+      await registerPartnerCode(code, uid)
+      return
     } catch (err) {
-      console.warn('[users] partner code retry failed', err)
+      console.warn('[users] partner code register failed, retrying', err)
     }
-  }
-
-  // Login must still succeed — linking by code may fail until next session
-  return code
+    for (let i = 0; i < 5; i++) {
+      const next = generatePartnerCode()
+      try {
+        await registerPartnerCode(next, uid)
+        if (next !== code) {
+          await updateDoc(doc(requireDb(), 'users', uid), {
+            partnerCode: next,
+            updatedAt: serverTimestamp(),
+          })
+        }
+        return
+      } catch (err) {
+        console.warn('[users] partner code retry failed', err)
+      }
+    }
+  })()
 }
 
 export async function ensureUserShell(user: User): Promise<UserProfile> {
   const existing = await getUserProfile(user.uid)
   if (existing) {
-    const code = await ensurePartnerCodeIndex(user.uid, existing.partnerCode)
-    return code === existing.partnerCode ? existing : { ...existing, partnerCode: code }
+    // Do not block returning users on partnerCodes writes
+    queuePartnerCodeIndex(user.uid, existing.partnerCode)
+    return existing
   }
 
   const db = requireDb()
@@ -186,17 +184,16 @@ export async function ensureUserShell(user: User): Promise<UserProfile> {
   try {
     await setDoc(doc(db, 'users', user.uid), payload)
   } catch (err) {
-    // Concurrent first login may have created the doc — load it
     const raced = await getUserProfile(user.uid)
     if (raced) {
-      const code = await ensurePartnerCodeIndex(user.uid, raced.partnerCode)
-      return code === raced.partnerCode ? raced : { ...raced, partnerCode: code }
+      queuePartnerCodeIndex(user.uid, raced.partnerCode)
+      return raced
     }
     console.error('[users] create shell failed', err)
     throw err
   }
 
-  const claimed = await ensurePartnerCodeIndex(user.uid, partnerCode)
+  queuePartnerCodeIndex(user.uid, partnerCode)
 
   return {
     uid: user.uid,
@@ -208,7 +205,7 @@ export async function ensureUserShell(user: User): Promise<UserProfile> {
     suitId: 'classic',
     statusMessage: 'WEB SENSORS ONLINE',
     partnerId: null,
-    partnerCode: claimed,
+    partnerCode,
     relationshipId: null,
     friendIds: [],
     incomingFriendRequests: [],

@@ -42,10 +42,13 @@ service cloud.firestore {
         && request.resource.data.onboardingComplete == false;
 
       allow update: if
-        // Owner updating own profile (may refresh partnerCode if index claim raced)
+        // Owner updating own profile (email sticky when present on both sides)
         (isSelf(userId)
           && request.resource.data.uid == userId
-          && request.resource.data.email == resource.data.email)
+          && (
+            !('email' in resource.data)
+            || request.resource.data.email == resource.data.email
+          ))
         // Incoming partner link
         || (isSignedIn()
           && resource.data.partnerId == null

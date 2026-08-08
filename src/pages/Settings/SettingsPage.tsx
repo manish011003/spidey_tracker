@@ -21,7 +21,11 @@ export function SettingsPage() {
         open={open}
         profile={profile}
         onClose={() => setOpen(false)}
-        onSignOut={() => void signOut()}
+        onSignOut={() => {
+          void signOut().then(() => {
+            window.location.assign('/')
+          })
+        }}
         onOpenPartnerLink={() => setOpen(false)}
         sharing={location.sharing}
         precise={location.precise}
