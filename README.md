@@ -1,182 +1,220 @@
 # SPIDEY TRACKER
 
-A private couples web app that feels like a homemade Spider-Man tracking console Ned Leeds would have built — pixel HUD, dark map, live partner location, and shared spider events.
+Private couples / friends web app with a homemade **pixel Spider HUD**: dark map, live presence, missions, quizzes, and spider-code invites.
 
 **MADE BY MANISH** · `SPIDEY TRACKER // PRIVATE NETWORK`
 
+Live (example): [spidey-tracker-pi.vercel.app](https://spidey-tracker-pi.vercel.app)
+
+---
+
+## Docs map
+
+| Doc | Audience |
+|-----|----------|
+| **This README** | Setup, contribute, deploy |
+| **[SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md)** | HLD / LLD, schemas, sequences, privacy |
+| **[.env.example](./.env.example)** | Required env vars |
+| **`firestore.rules`** / **`database.rules.json`** | Security ACL |
+
+New contributors: start here → skim architecture §1–2 → run local setup → pick a small HUD/feature PR.
+
+---
+
+## What it does
+
+- Google sign-in → onboarding (role / spider / suit / name)
+- **Partner** link (1:1) + **friends** with request accept/decline
+- **Share spider code** (WhatsApp, Instagram copy+open, native share, clipboard)
+- Dark Leaflet map: you, sharing partner/friends, events, **nearby landmark quests**
+- Adventure: XP, levels, suits, quizzes, missions, achievements
+- Privacy-first location (opt-in; friends ≠ location)
+
+---
+
 ## Tech stack
 
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS 4, Framer Motion (optional accents), Leaflet
-- **Auth:** Firebase Authentication (Google)
-- **Data:** Cloud Firestore (profiles, relationships, events)
-- **Live:** Firebase Realtime Database (presence + current location only)
-- **Maps:** Leaflet + Carto Dark Matter tiles (OSM-compatible)
-- **Geocoding:** Nominatim (configurable)
+| Layer | Choice |
+|-------|--------|
+| UI | React 19, TypeScript, Vite, Tailwind 4, Leaflet |
+| Auth | Firebase Authentication (Google) |
+| Data | Cloud Firestore |
+| Live | Firebase Realtime Database (presence / location / nudges) |
+| Host | Vercel (static SPA) |
+| Quests | Overpass API + local sector fallback |
 
-## Architecture
+Architecture diagram and store split → [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md).
 
-```
-Firebase Auth
-    │
-    ▼
-User Profile
-    │
-    ▼
-Partner Relationship
-    ├── Firestore → profiles, relationships, events, preferences, partnerCodes
-    └── Realtime DB → presence, current location, partnerAccess mirror
-```
+---
 
-Location history is intentionally **not** stored. Only the current location is published to Realtime Database while sharing is enabled.
+## Quick start (contributors)
 
-## Local setup
+### Prerequisites
+
+- Node.js 20+ (recommended)
+- npm
+- A Firebase project with Auth (Google), Firestore, and Realtime Database  
+  **or** ask a maintainer for a shared `.env` for local work
+
+### 1. Clone & install
 
 ```bash
+git clone <repo-url>
+cd spidy_tracker
 npm install
 cp .env.example .env
-# fill Firebase + optional map/geocoder vars
-npm run dev
 ```
 
-## Environment variables
+### 2. Fill `.env`
 
-See `.env.example`:
+Copy values from Firebase Console → Project settings → Your apps → Web:
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_FIREBASE_*` | Firebase web config |
+| `VITE_FIREBASE_API_KEY` … `APP_ID` | Firebase web config |
 | `VITE_FIREBASE_DATABASE_URL` | Realtime Database URL |
-| `VITE_MAP_TILE_URL` | Leaflet tile template |
-| `VITE_MAP_ATTRIBUTION` | Required attribution HTML/text |
-| `VITE_GEOCODER_URL` | Nominatim-compatible endpoint |
-| `VITE_GEOCODER_USER_AGENT` | Identify your app to the geocoder |
+| `VITE_MAP_TILE_URL` / `ATTRIBUTION` | Leaflet tiles (defaults OK) |
+| `VITE_GEOCODER_URL` / `USER_AGENT` | Nominatim (defaults OK) |
 
-## Firebase setup
+Never commit `.env`.
 
-1. Create a Firebase project.
-2. Enable **Google** sign-in under Authentication.
-3. Create a **Firestore** database.
-4. Create a **Realtime Database**.
-5. Add a Web app and copy config into `.env`.
-6. Add your domain to Auth authorized domains (include `localhost` for dev).
-7. Deploy security rules:
+### 3. Run locally
 
 ```bash
-npm i -g firebase-tools
-firebase login
-firebase use <your-project-id>
-firebase deploy --only firestore:rules,database
+npm run dev
 ```
 
-### Google authentication
+Open the URL Vite prints (usually `http://localhost:5173`).
 
-- Firebase Console → Authentication → Sign-in method → Google → Enable
-- OAuth consent screen may be required for production Google Cloud projects
+### 4. Before you open a PR
 
-### Collections
+```bash
+npm run lint
+npm run build    # required — Vercel runs tsc -b && vite build
+```
 
-- `users/{uid}` — profile, role, spider/suit, partner link, preferences
-- `partnerCodes/{CODE}` — maps spider code → uid (lookup without scanning users)
-- `relationships/{id}` — exactly two `memberIds`
-- `relationships/{id}/events/{eventId}` — shared locations
+`npm run dev` alone does **not** catch all TypeScript errors. Always run `npm run build` before pushing.
 
-### Realtime paths
+---
 
-- `presence/{uid}` — online flag, lastSeen, location sharing + coords
-- `partnerAccess/{uid}/partnerId` — mirrors Firestore link so RTDB rules can authorize partner reads
+## Project structure (where to edit)
 
-## Security model
+```
+src/
+  pages/           # Route screens (Landing, Onboarding, Tracker…)
+  components/
+    tracker/       # HUD chrome, Find Spider, toolbar
+    map/           # Leaflet map + markers
+    adventure/     # Missions, quiz, friends, discoveries, dossier
+    share/         # ShareCodeButtons (social invite)
+    pixel/         # Buttons, modals, loaders — reuse these
+  hooks/           # Presence, friends, location, nearby discoveries
+  services/
+    firebase/      # Auth, users, friends, adventure, presence…
+    discoveries/   # Nearby POI quests
+  data/            # Static catalogs (missions, quizzes, suits…)
+  utils/           # Geo, progression, shareInvite, partner codes
+  types/           # Shared TypeScript contracts
+```
 
-- Users read/write their own profile.
-- Linked partners can read each other’s profiles.
-- Unlinked, onboarded profiles are readable so partner codes can resolve (private couples app tradeoff).
-- Relationship + events: members only.
-- Presence location: only self and linked partner (via `partnerAccess` mirror).
-- Location sharing defaults **OFF**.
-- Never leave databases in test/open mode.
+Full layout + module table → [SYSTEM_ARCHITECTURE.md §3](./SYSTEM_ARCHITECTURE.md).
 
-Rules files:
+---
 
-- `firestore.rules`
-- `database.rules.json`
+## Contributing
 
-## Location privacy
+### Workflow
 
-- Sharing is explicit and toggleable.
-- Precise location can be disabled (coords rounded ~1km).
-- Disabling sharing clears published coordinates.
-- No public location URLs, no history trail, no third-party analytics of GPS.
-- Reverse geocoding only runs when the partner panel needs a city-level label.
+1. Create a branch from `main` (`feat/…`, `fix/…`, `docs/…`).
+2. Keep PRs small and focused.
+3. Match the existing **pixel HUD** look — no generic dashboard redesigns.
+4. Prefer extending `data/adventure.ts` / existing services over new backends.
+5. Location features → Realtime Database presence only (no GPS history in Firestore).
+6. If you touch peer-readable data → update **`firestore.rules`** and/or **`database.rules.json`** and note that in the PR.
+7. Update **SYSTEM_ARCHITECTURE.md** when you change schemas or major flows.
+8. Run `npm run build` + `npm run lint` before requesting review.
 
-## Map / geocoder notes
+### Good first contributions
 
-- Default tiles: Carto Dark Matter (respect their terms + OSM attribution).
-- Nominatim: debounce, min query length, in-memory cache — do not hammer the public API.
-- For heavy production traffic, run your own Nominatim or a commercial geocoder and point `VITE_GEOCODER_URL` at it.
+- New quiz questions / missions / achievements in `src/data/adventure.ts`
+- Copy / UX polish in pixel panels (keep tone: uppercase HUD labels)
+- Suit or spider catalog entries (`src/data/suits.ts`, `src/data/spiders.ts`)
+- Docs and accessibility tweaks
+- Bugfixes with a clear repro
+
+### Design rules (short)
+
+- Reuse `PixelButton`, `PixelModal`, CSS vars `--spidey-*`
+- Sound stays **off by default**
+- Privacy: friendship never implies location sharing
+- Watermark / credit: **MADE BY MANISH** — do not add Marvel/Samsung branding
+
+### PR checklist
+
+- [ ] `npm run build` passes  
+- [ ] `npm run lint` passes  
+- [ ] No secrets in the diff  
+- [ ] Rules updated + mentioned if ACL changed  
+- [ ] Architecture doc touched if behavior/schema changed  
+
+---
+
+## Firebase setup (maintainers)
+
+1. Create Firebase project → enable **Google** sign-in.  
+2. Create **Firestore** + **Realtime Database**.  
+3. Add Web app → copy config into `.env` / Vercel env.  
+4. **Authorized domains:** `localhost`, your Vercel host (`*.vercel.app`).  
+5. Google Cloud → **same project as Firebase** → Google Auth Platform / OAuth consent  
+   - Audience **External**  
+   - If **Testing**, add every Gmail as a test user (or publish the app)  
+6. Deploy rules:
+
+```bash
+npx firebase-tools login
+npx firebase-tools use spidy-tracker   # or your project id
+npx firebase-tools deploy --only firestore:rules,database
+```
+
+Security model details → [SYSTEM_ARCHITECTURE.md §2.6 & §3.5](./SYSTEM_ARCHITECTURE.md).
+
+---
+
+## Deploy (Vercel)
+
+1. Import the GitHub repo.  
+2. Framework: **Vite**, output **`dist`**, build **`npm run build`**.  
+3. Set all `VITE_FIREBASE_*` (and optional map/geocoder) env vars.  
+4. Redeploy after any env change (Vite inlines env at build time).  
+5. Add the production domain to Firebase Auth authorized domains.
+
+`vercel.json` already includes SPA rewrite + COOP header for Google popup auth.
+
+---
 
 ## Scripts
 
 ```bash
-npm run dev       # local development
-npm run build     # production build
-npm run preview   # preview build
+npm run dev       # local Vite
+npm run build     # tsc -b && vite build (CI / Vercel)
+npm run preview   # serve dist/
 npm run lint      # oxlint
 ```
 
-## Adding assets
+---
 
-### Spider avatars
+## Privacy (summary)
 
-1. Add a definition in `src/data/spiders.ts`
-2. Colors drive `src/assets/spiders/SpiderAvatar.tsx`
-3. Optionally extend the SVG branches for unique silhouettes
+- Location sharing defaults **OFF**.  
+- Disabling sharing clears published coords.  
+- No location history trail.  
+- Friends/partner can see profile; they only see the map pin if that user opts in.  
 
-### Suits
+More → [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md).
 
-1. Add to `src/data/suits.ts` (`id`, colors, rarity, description)
-2. Suit colors tint the shared spider avatar
+---
 
-### Event icons
+## License / credit
 
-1. Add to `src/data/events.ts`
-2. Markers pick up emoji/color automatically
-
-### UI sounds
-
-Web Audio beeps live in `src/services/sound/audio.ts` (off by default). Extend `playSound()` names as needed — keep them original/synthesized.
-
-## Deployment
-
-1. Set production `.env` / hosting env vars
-2. `npm run build`
-3. Deploy `dist/` to Firebase Hosting, Vercel, Netlify, etc.
-4. Add the production domain to Firebase Auth authorized domains
-5. Deploy Firestore + RTDB rules
-
-```bash
-# Firebase Hosting example
-firebase init hosting
-firebase deploy
-```
-
-## Product routes
-
-| Route | Purpose |
-|-------|---------|
-| `/` | Boot screen / auth redirect |
-| `/login` | Sign-in |
-| `/onboarding` | Role → spider → suit → name → link |
-| `/tracker` | Main map HUD |
-| `/settings` | Profile / privacy controls |
-
-## Acceptance highlights
-
-- Google login + themed errors
-- Boyfriend/girlfriend role selection
-- Original pixel spider/suit identity
-- Partner codes (non-UID) + two-person link
-- Realtime presence + throttled location sharing
-- Shared events with pixel markers
-- No movie/Samsung/commercial branding
-- `MADE BY MANISH` watermark
-- Reduce-motion + sound defaults respected
+Private project · **MADE BY MANISH**.  
+Ask before redistributing or publishing a fork publicly.
