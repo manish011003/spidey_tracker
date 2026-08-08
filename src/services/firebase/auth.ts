@@ -79,6 +79,14 @@ function mapAuthError(error: unknown): Error {
   if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
     return new Error('SIGN-IN CANCELLED — TAP AGAIN')
   }
+  // Firebase IndexedDB race (common after popup/redirect on Chrome/Safari)
+  if (
+    msg.includes('Database is closing') ||
+    msg.includes('Data base is closing') ||
+    msg.includes('closing/hidden')
+  ) {
+    return new Error('SIGN-IN GLITCH — TAP SIGN IN AGAIN')
+  }
   if (
     code === 'auth/access-denied' ||
     msg.includes('access_denied') ||
@@ -89,6 +97,15 @@ function mapAuthError(error: unknown): Error {
   }
   return new Error(
     code ? `IDENTITY VERIFICATION FAILED (${code})` : 'IDENTITY VERIFICATION FAILED',
+  )
+}
+
+function isIndexedDbRace(error: unknown): boolean {
+  const msg = authMessage(error)
+  return (
+    msg.includes('Database is closing') ||
+    msg.includes('Data base is closing') ||
+    msg.includes('closing/hidden')
   )
 }
 
@@ -116,6 +133,17 @@ export async function signInWithGoogle(): Promise<User> {
     return result.user
   } catch (error: unknown) {
     const code = authCode(error)
+
+    // Popup often succeeds at Google, then IndexedDB throws while saving the session
+    if (isIndexedDbRace(error)) {
+      if (auth.currentUser) {
+        clearRedirectPending()
+        return auth.currentUser
+      }
+      console.warn('[auth] popup IndexedDB race — falling back to redirect', error)
+      return startRedirect()
+    }
+
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
       throw mapAuthError(error)
     }
@@ -147,7 +175,7 @@ export async function handleRedirectResult(): Promise<User | null> {
   } catch (error: unknown) {
     const code = authCode(error)
     const msg = authMessage(error)
-    if (msg.includes('Database is closing') || msg.includes('closing/hidden')) {
+    if (isIndexedDbRace(error)) {
       console.warn('[auth] redirect IDB race — waiting onAuthStateChanged')
       return null
     }
