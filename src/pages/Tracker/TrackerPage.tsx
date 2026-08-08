@@ -21,8 +21,15 @@ import { ProfilePanel } from '../../components/profile/ProfilePanel'
 import { PartnerPanel } from '../../components/partner/PartnerPanel'
 import { PartnerLinkModal } from '../../components/partner/PartnerLinkModal'
 import { OnboardingChart } from '../../components/onboarding/OnboardingChart'
+import { CharacterSheet } from '../../components/adventure/CharacterSheet'
+import { FriendsHub } from '../../components/adventure/FriendsHub'
+import { QuizModal } from '../../components/adventure/QuizModal'
+import { MissionsPanel } from '../../components/adventure/MissionsPanel'
+import { DiscoveriesPanel } from '../../components/adventure/DiscoveriesPanel'
+import { normalizeAdventure, grantAchievement, bumpMission } from '../../services/firebase/adventure'
 import { EventModal } from '../../components/events/EventModal'
 import { EventInfoPanel } from '../../components/events/EventInfoPanel'
+import { EventsPanel } from '../../components/events/EventsPanel'
 import { PixelLoader } from '../../components/pixel/PixelLoader'
 import { PixelButton } from '../../components/pixel/PixelButton'
 import { formatDistance, formatRelativeTime, haversineDistanceKm } from '../../utils/geo'
@@ -48,6 +55,7 @@ export function TrackerPage() {
   const [partnerOpen, setPartnerOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [eventOpen, setEventOpen] = useState(false)
+  const [eventsListOpen, setEventsListOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<SharedEvent | null>(null)
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom?: number; nonce: number } | null>(null)
   const [logoTaps, setLogoTaps] = useState(0)
@@ -61,9 +69,18 @@ export function TrackerPage() {
   } | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
   const [guideFirstRun, setGuideFirstRun] = useState(false)
+  const [characterOpen, setCharacterOpen] = useState(false)
+  const [friendsHubOpen, setFriendsHubOpen] = useState(false)
+  const [quizOpen, setQuizOpen] = useState(false)
+  const [missionsOpen, setMissionsOpen] = useState(false)
+  const [discoveriesOpen, setDiscoveriesOpen] = useState(false)
   const prevPartnerId = useRef<string | null | undefined>(undefined)
   const prevFriendCount = useRef<number | undefined>(undefined)
   const guideAutoShown = useRef(false)
+  const adventure = useMemo(
+    () => (profile ? normalizeAdventure(profile.adventure) : null),
+    [profile],
+  )
 
   useEffect(() => {
     if (profile) {
@@ -107,6 +124,7 @@ export function TrackerPage() {
       void playRingtone()
       setNudgeBanner('SPIDER SIGNAL LINKED')
       window.setTimeout(() => setNudgeBanner(null), 4000)
+      void grantAchievement(profile.uid, 'linked_partner')
     }
     prevPartnerId.current = next
   }, [profile?.partnerId, profile])
@@ -151,6 +169,8 @@ export function TrackerPage() {
       await unlockAudio()
       await sendPartnerNudge(targetUid, profile.uid, profile.displayName)
       playSound('nudge')
+      void bumpMission(profile.uid, 'daily_nudge', 1)
+      void bumpMission(profile.uid, 'social_nudge_3', 1)
       setNudgeCooldown(true)
       window.setTimeout(() => setNudgeCooldown(false), 15_000)
     } catch {
@@ -306,7 +326,7 @@ export function TrackerPage() {
         })
       } else setLinkOpen(true)
     }
-    if (id === 'events') setEventOpen(true)
+    if (id === 'events') setEventsListOpen(true)
     if (id === 'info') openGuide()
   }
 
@@ -318,6 +338,7 @@ export function TrackerPage() {
       playSound('connect')
       setLogoTaps(0)
       window.setTimeout(() => setEasterEgg(false), 4000)
+      if (profile) void grantAchievement(profile.uid, 'night_owl')
     }
   }
 
@@ -337,6 +358,11 @@ export function TrackerPage() {
       <TrackerShell
         radarMode={radarMode}
         suitId={profile.suitId}
+        spriteLevel={adventure?.level}
+        onSpriteClick={() => {
+          playSound('click')
+          setCharacterOpen(true)
+        }}
         banner={
           nudgeBanner ? (
             <div className="pixel-panel px-3 py-2 text-center" role="status">
@@ -358,6 +384,12 @@ export function TrackerPage() {
             <div className="pixel-panel px-3 py-2 text-center">
               <p className="pixel-label" style={{ color: 'var(--spidey-green)', fontSize: 8 }}>
                 ╔ TWO SPIDERS ACTIVE ╗
+              </p>
+            </div>
+          ) : adventure ? (
+            <div className="pixel-panel px-3 py-2 text-center">
+              <p className="pixel-label" style={{ color: 'var(--spidey-cyan)', fontSize: 8 }}>
+                LVL {adventure.level} · {profile.friendIds.length} FRIENDS · TAP YOUR SPIDER
               </p>
             </div>
           ) : null
@@ -403,6 +435,9 @@ export function TrackerPage() {
             flyTo={flyTo}
             onEventClick={setSelectedEvent}
             onSpiderClick={openSpiderById}
+            discoveredIds={adventure?.discoveries ?? []}
+            showDiscoveries
+            onDiscoveryClick={() => setDiscoveriesOpen(true)}
             now={now}
             mySharingEnabled={location.sharing}
             onEnableSharing={() => void location.setSharing(true)}
@@ -413,8 +448,11 @@ export function TrackerPage() {
             onCenterMe={centerMe}
             onFindSpider={() => findSpider()}
             onWorldView={worldView}
-            onEvents={() => setEventOpen(true)}
+            onEvents={() => setEventsListOpen(true)}
             onLocation={() => setProfileOpen(true)}
+            onQuiz={() => setQuizOpen(true)}
+            onMissions={() => setMissionsOpen(true)}
+            onFriends={() => setFriendsHubOpen(true)}
             hasPartnerLocation={Boolean(
               (focusPresence?.locationSharingEnabled &&
                 focusPresence.latitude != null &&
@@ -453,6 +491,77 @@ export function TrackerPage() {
 
       <OnboardingChart open={guideOpen} onClose={closeGuide} firstRun={guideFirstRun} />
 
+      <CharacterSheet
+        open={characterOpen}
+        profile={profile}
+        onClose={() => setCharacterOpen(false)}
+        onEditCharacter={() => {
+          setCharacterOpen(false)
+          setProfileOpen(true)
+        }}
+        onOpenMissions={() => {
+          setCharacterOpen(false)
+          setMissionsOpen(true)
+        }}
+        onOpenQuiz={() => {
+          setCharacterOpen(false)
+          setQuizOpen(true)
+        }}
+        onOpenFriends={() => {
+          setCharacterOpen(false)
+          setFriendsHubOpen(true)
+        }}
+        onChanged={() => void refreshProfile()}
+      />
+
+      <FriendsHub
+        open={friendsHubOpen}
+        profile={profile}
+        friendPresence={friendPresence}
+        onClose={() => setFriendsHubOpen(false)}
+        onChanged={() => void refreshProfile()}
+        onSelectFriend={(uid) => {
+          setFriendsHubOpen(false)
+          openSpiderById(uid, 'friend')
+        }}
+      />
+
+      <QuizModal
+        open={quizOpen}
+        uid={profile.uid}
+        streak={adventure?.quizStreak ?? 0}
+        onClose={() => setQuizOpen(false)}
+        onFinished={(summary) => {
+          void refreshProfile()
+          setNudgeBanner(summary)
+          window.setTimeout(() => setNudgeBanner(null), 4000)
+        }}
+      />
+
+      <MissionsPanel
+        open={missionsOpen}
+        profile={profile}
+        onClose={() => setMissionsOpen(false)}
+        onOpenQuiz={() => {
+          setMissionsOpen(false)
+          setQuizOpen(true)
+        }}
+        onOpenDiscoveries={() => {
+          setMissionsOpen(false)
+          setDiscoveriesOpen(true)
+        }}
+      />
+
+      <DiscoveriesPanel
+        open={discoveriesOpen}
+        profile={profile}
+        myLat={myPresence.latitude}
+        myLng={myPresence.longitude}
+        onClose={() => setDiscoveriesOpen(false)}
+        onChanged={() => void refreshProfile()}
+        onFlyTo={(lat, lng) => setFlyTo({ lat, lng, zoom: 15, nonce: Date.now() })}
+      />
+
       <ProfilePanel
         open={profileOpen}
         profile={profile}
@@ -471,7 +580,10 @@ export function TrackerPage() {
         }}
         sharing={location.sharing}
         precise={location.precise}
-        onToggleSharing={(v) => void location.setSharing(v)}
+        onToggleSharing={(v) => {
+          void location.setSharing(v)
+          if (v) void bumpMission(profile.uid, 'daily_share', 1)
+        }}
         onTogglePrecise={(v) => void location.setPrecise(v)}
       />
 
@@ -513,6 +625,29 @@ export function TrackerPage() {
         onChanged={() => void refreshProfile()}
       />
 
+      <EventsPanel
+        open={eventsListOpen}
+        events={events}
+        myUid={profile.uid}
+        myName={profile.displayName}
+        partnerName={partner?.displayName}
+        hasRelationship={Boolean(profile.relationshipId)}
+        onClose={() => setEventsListOpen(false)}
+        onCreate={() => {
+          setEventsListOpen(false)
+          setEventOpen(true)
+        }}
+        onSelect={(ev) => {
+          setEventsListOpen(false)
+          setSelectedEvent(ev)
+        }}
+        onFlyTo={(ev) => {
+          setEventsListOpen(false)
+          setFlyTo({ lat: ev.latitude, lng: ev.longitude, zoom: 15, nonce: Date.now() })
+          setSelectedEvent(ev)
+        }}
+      />
+
       <EventModal
         open={eventOpen}
         onClose={() => setEventOpen(false)}
@@ -521,6 +656,7 @@ export function TrackerPage() {
         onSave={async (data) => {
           if (!profile.relationshipId) throw new Error('LINK A PARTNER FIRST')
           await addEvent({ ...data, createdBy: profile.uid })
+          setEventsListOpen(true)
         }}
       />
 
@@ -532,6 +668,9 @@ export function TrackerPage() {
             : partner?.displayName
         }
         onClose={() => setSelectedEvent(null)}
+        onFlyTo={(ev) =>
+          setFlyTo({ lat: ev.latitude, lng: ev.longitude, zoom: 15, nonce: Date.now() })
+        }
       />
     </>
   )

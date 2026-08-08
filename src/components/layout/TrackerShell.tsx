@@ -13,6 +13,9 @@ type Props = {
   radarMode?: 'idle' | 'nearby' | 'updating'
   banner?: ReactNode
   suitId?: SuitId
+  /** Open character dossier when the big deck spider is clicked */
+  onSpriteClick?: () => void
+  spriteLevel?: number
 }
 
 export function TrackerShell({
@@ -25,6 +28,8 @@ export function TrackerShell({
   radarMode = 'idle',
   banner,
   suitId = 'classic',
+  onSpriteClick,
+  spriteLevel,
 }: Props) {
   return (
     <div
@@ -102,9 +107,18 @@ export function TrackerShell({
           <div className="mt-2 sm:mt-3 relative z-[3]">
             <div className="pixel-deck">
               <div className="tracker-sprite-slot flex items-end justify-center md:justify-start shrink-0">
-                <div className="spider-idle tracker-sprite" aria-hidden>
+                <button
+                  type="button"
+                  className="spider-idle tracker-sprite tracker-sprite--btn"
+                  onClick={onSpriteClick}
+                  aria-label="Open spider dossier"
+                  title="YOUR SPIDER — TAP FOR DOSSIER"
+                >
                   <PixelSpideySprite size={168} suitId={suitId} />
-                </div>
+                  {spriteLevel != null && (
+                    <span className="tracker-sprite__lvl pixel-label">LVL {spriteLevel}</span>
+                  )}
+                </button>
               </div>
 
               <div className="w-full min-w-0">{ticker}</div>

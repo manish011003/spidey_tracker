@@ -1,14 +1,17 @@
 import { PixelModal } from '../pixel/PixelModal'
+import { PixelButton } from '../pixel/PixelButton'
 import type { SharedEvent } from '../../types'
 import { getEventIcon } from '../../data/events'
+import { playSound } from '../../services/sound/audio'
 
 type Props = {
   event: SharedEvent | null
   authorName?: string
   onClose: () => void
+  onFlyTo?: (event: SharedEvent) => void
 }
 
-export function EventInfoPanel({ event, authorName, onClose }: Props) {
+export function EventInfoPanel({ event, authorName, onClose, onFlyTo }: Props) {
   if (!event) return null
   const icon = getEventIcon(event.icon)
 
@@ -35,6 +38,18 @@ export function EventInfoPanel({ event, authorName, onClose }: Props) {
         <p className="pixel-label" style={{ color: 'var(--spidey-text-dim)', fontSize: 7 }}>
           ADDED BY {authorName ?? 'SPIDER'}
         </p>
+        {onFlyTo && (
+          <PixelButton
+            className="w-full"
+            onClick={() => {
+              playSound('signal')
+              onFlyTo(event)
+              onClose()
+            }}
+          >
+            SHOW ON MAP
+          </PixelButton>
+        )}
       </div>
     </PixelModal>
   )

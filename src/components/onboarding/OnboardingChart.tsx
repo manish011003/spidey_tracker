@@ -31,7 +31,7 @@ const STEPS: Array<{
   {
     n: '03',
     title: 'ADD FRIENDS',
-    body: 'Use ADD FRIEND with another spider code. Friends show on the map and in the network menu.',
+    body: 'Send a friend request with a spider code. Accept requests in FRIENDS. Map pins only if they opt in to share location.',
     accent: 'var(--spidey-cyan)',
   },
   {

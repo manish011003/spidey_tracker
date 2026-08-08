@@ -7,10 +7,54 @@ import {
   type Timestamp,
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
-import type { UserPreferences, UserProfile, UserRole, SpiderId, SuitId } from '../../types'
+import type {
+  AdventureProgress,
+  UserPreferences,
+  UserProfile,
+  UserRole,
+  SpiderId,
+  SuitId,
+} from '../../types'
 import { generatePartnerCode } from '../../utils/partnerCode'
 import { requireDb } from './config'
 import { lookupPartnerCode, registerPartnerCode } from './partnerCodes'
+import { levelFromXp } from '../../utils/progression'
+
+export function emptyAdventure(): AdventureProgress {
+  return {
+    xp: 0,
+    level: 1,
+    unlockedSuits: ['classic'],
+    achievements: [],
+    completedMissions: [],
+    discoveries: [],
+    missionProgress: {},
+    quizStreak: 0,
+    quizzesCompleted: 0,
+    nudgesSent: 0,
+  }
+}
+
+function mapAdventure(raw: unknown): AdventureProgress {
+  const base = emptyAdventure()
+  if (!raw || typeof raw !== 'object') return base
+  const d = raw as Partial<AdventureProgress>
+  const xp = Math.max(0, d.xp ?? 0)
+  return {
+    ...base,
+    ...d,
+    xp,
+    level: levelFromXp(xp),
+    unlockedSuits: Array.isArray(d.unlockedSuits) ? (d.unlockedSuits as SuitId[]) : ['classic'],
+    achievements: Array.isArray(d.achievements) ? d.achievements : [],
+    completedMissions: Array.isArray(d.completedMissions) ? d.completedMissions : [],
+    discoveries: Array.isArray(d.discoveries) ? d.discoveries : [],
+    missionProgress: d.missionProgress ?? {},
+    quizStreak: d.quizStreak ?? 0,
+    quizzesCompleted: d.quizzesCompleted ?? 0,
+    nudgesSent: d.nudgesSent ?? 0,
+  }
+}
 
 function normalizeSuitId(id: string): SuitId {
   if (id === 'mystery') return 'ghost'
@@ -49,6 +93,12 @@ export function mapUserDoc(uid: string, data: Record<string, unknown>): UserProf
     partnerCode: (data.partnerCode as string) ?? '',
     relationshipId: (data.relationshipId as string | null) ?? null,
     friendIds: Array.isArray(data.friendIds) ? (data.friendIds as string[]) : [],
+    incomingFriendRequests: Array.isArray(data.incomingFriendRequests)
+      ? (data.incomingFriendRequests as string[])
+      : [],
+    outgoingFriendRequests: Array.isArray(data.outgoingFriendRequests)
+      ? (data.outgoingFriendRequests as string[])
+      : [],
     onboardingComplete: Boolean(data.onboardingComplete),
     createdAt: toMillis(data.createdAt),
     updatedAt: toMillis(data.updatedAt),
@@ -58,6 +108,7 @@ export function mapUserDoc(uid: string, data: Record<string, unknown>): UserProf
       // Mute by default unless explicitly enabled
       soundEnabled: Boolean((data.preferences as Partial<UserPreferences> | undefined)?.soundEnabled),
     },
+    adventure: mapAdventure(data.adventure),
   }
 }
 
@@ -87,10 +138,13 @@ export async function ensureUserShell(user: User): Promise<UserProfile> {
     partnerCode: generatePartnerCode(),
     relationshipId: null,
     friendIds: [],
+    incomingFriendRequests: [],
+    outgoingFriendRequests: [],
     onboardingComplete: false,
     createdAt: now,
     updatedAt: now,
     preferences: { ...DEFAULT_PREFERENCES },
+    adventure: emptyAdventure(),
   }
 
   await setDoc(doc(db, 'users', user.uid), {
@@ -114,9 +168,16 @@ export async function completeOnboarding(
   },
 ): Promise<void> {
   const db = requireDb()
+  const starter = emptyAdventure()
+  starter.xp = 20
+  starter.level = levelFromXp(20)
+  starter.achievements = ['first_web']
   await updateDoc(doc(db, 'users', uid), {
     ...data,
     onboardingComplete: true,
+    adventure: starter,
+    incomingFriendRequests: [],
+    outgoingFriendRequests: [],
     updatedAt: serverTimestamp(),
   })
 }

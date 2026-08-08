@@ -45,6 +45,26 @@ export interface UserPreferences {
   hasSeenGuide?: boolean
 }
 
+/** Adventure / RPG progress stored on the user doc */
+export interface AdventureProgress {
+  xp: number
+  /** Cached level (also derivable from xp) */
+  level: number
+  unlockedSuits: SuitId[]
+  achievements: string[]
+  completedMissions: string[]
+  discoveries: string[]
+  /** missionId → progress count for current period */
+  missionProgress: Record<string, number>
+  /** YYYY-MM-DD of last daily mission reset key */
+  dailyKey?: string
+  weeklyKey?: string
+  quizStreak: number
+  lastQuizDate?: string
+  quizzesCompleted: number
+  nudgesSent: number
+}
+
 export interface UserProfile {
   uid: string
   displayName: string
@@ -61,10 +81,15 @@ export interface UserProfile {
   relationshipId: string | null
   /** Additional spiders beyond the romantic partner link */
   friendIds: string[]
+  /** Incoming friend request UIDs (awaiting accept) */
+  incomingFriendRequests: string[]
+  /** Outgoing friend request UIDs */
+  outgoingFriendRequests: string[]
   onboardingComplete: boolean
   createdAt: number
   updatedAt: number
   preferences: UserPreferences
+  adventure: AdventureProgress
 }
 
 export interface Relationship {

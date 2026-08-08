@@ -69,6 +69,9 @@ export function OnboardingFlow({ profile, onComplete }: Props) {
         nickname: nickname.trim() || undefined,
         onboardingComplete: true,
         friendIds: profile.friendIds ?? [],
+        incomingFriendRequests: profile.incomingFriendRequests ?? [],
+        outgoingFriendRequests: profile.outgoingFriendRequests ?? [],
+        adventure: profile.adventure,
       }
       setStep('linking')
       setLinkPhase(0)

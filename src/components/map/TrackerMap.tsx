@@ -5,9 +5,11 @@ import type { SharedEvent, UserProfile, PresenceData } from '../../types'
 import { PartnerMarker } from './PartnerMarker'
 import { SelfMarker } from './SelfMarker'
 import { EventMarker } from './EventMarker'
+import { DiscoveryMarker } from './DiscoveryMarker'
 import { PixelZoomControl } from './PixelZoomControl'
 import { getPresenceStatus } from '../../utils/geo'
 import { PixelButton } from '../pixel/PixelButton'
+import { DISCOVERIES } from '../../data/adventure'
 
 const TILE_URL =
   (import.meta.env.VITE_MAP_TILE_URL as string | undefined) ??
@@ -34,6 +36,9 @@ type Props = {
   flyTo: FlyTarget
   onEventClick: (event: SharedEvent) => void
   onSpiderClick?: (uid: string, kind: 'partner' | 'friend') => void
+  discoveredIds?: string[]
+  showDiscoveries?: boolean
+  onDiscoveryClick?: () => void
   now?: number
   mySharingEnabled?: boolean
   onEnableSharing?: () => void
@@ -166,6 +171,9 @@ function TrackerMapInner({
   flyTo,
   onEventClick,
   onSpiderClick,
+  discoveredIds = [],
+  showDiscoveries = true,
+  onDiscoveryClick,
   now = Date.now(),
   mySharingEnabled = false,
   onEnableSharing,
@@ -274,6 +282,16 @@ function TrackerMapInner({
         {events.map((ev) => (
           <EventMarker key={ev.id} event={ev} onClick={onEventClick} />
         ))}
+
+        {showDiscoveries &&
+          DISCOVERIES.map((d) => (
+            <DiscoveryMarker
+              key={d.id}
+              discovery={d}
+              found={discoveredIds.includes(d.id)}
+              onClick={onDiscoveryClick}
+            />
+          ))}
       </MapContainer>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] pointer-events-auto max-w-[90%]">

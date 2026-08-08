@@ -630,6 +630,62 @@ html.reduce-motion .map-spidey-pin {
   image-rendering: pixelated;
 }
 
+.xp-bar {
+  height: 10px;
+  border: 2px solid #020810;
+  background: #0a1524;
+  box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.xp-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--spidey-cyan), var(--spidey-orange));
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  transition: width 120ms steps(4);
+}
+
+.tracker-sprite--btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+}
+
+.tracker-sprite--btn:focus-visible {
+  outline: 3px solid var(--spidey-yellow);
+  outline-offset: 4px;
+}
+
+.tracker-sprite__lvl {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  transform: translateX(-50%);
+  background: rgba(2, 8, 16, 0.92);
+  border: 2px solid #020810;
+  padding: 2px 6px;
+  font-size: 6px;
+  color: var(--spidey-yellow);
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 #020810;
+}
+
+.map-discovery-pin {
+  width: 48px;
+  height: 48px;
+  border: 3px solid;
+  background: rgba(7, 20, 38, 0.92);
+  box-shadow: 2px 3px 0 #020810;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  image-rendering: pixelated;
+  animation: map-pin-float 2.2s steps(2) infinite;
+}
+
 /* Post-login onboarding chart */
 .onboard-chart__steps {
   list-style: none;

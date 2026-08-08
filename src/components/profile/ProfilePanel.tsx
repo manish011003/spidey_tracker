@@ -280,7 +280,7 @@ export function ProfilePanel({
             className="font-[family-name:var(--font-readable)] text-lg mb-2"
             style={{ color: 'var(--spidey-text-dim)' }}
           >
-            Visible only to your linked partner.
+            Opt-in only — friends & partner never see you unless you share.
           </p>
           <Toggle label="SHARE MY LOCATION" value={sharing} onChange={onToggleSharing} />
           <Toggle label="PRECISE LOCATION" value={precise} onChange={onTogglePrecise} />

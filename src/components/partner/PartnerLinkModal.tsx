@@ -38,7 +38,7 @@ export function PartnerLinkModal({ open, profile, partner, onClose, onChanged }:
       if (mode === 'friend') {
         const friend = await addFriend(profile, code)
         playSound('signal')
-        setFriendNotice(`FRIEND LINKED: ${friend.displayName.toUpperCase()}`)
+        setFriendNotice(`REQUEST SENT → ${friend.displayName.toUpperCase()}`)
         setCode('')
         onChanged()
       } else {
