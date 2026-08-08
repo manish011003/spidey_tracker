@@ -12,6 +12,8 @@ type Props = {
   partner: UserProfile | null
   presence: PresenceData
   now?: number
+  /** Partner (default) or friend — changes title / nudge label / unlink */
+  kind?: 'partner' | 'friend'
   onClose: () => void
   onUnlink?: () => void
   onFind?: () => void
@@ -25,6 +27,7 @@ export function PartnerPanel({
   partner,
   presence,
   now = Date.now(),
+  kind = 'partner',
   onClose,
   onUnlink,
   onFind,
@@ -49,15 +52,19 @@ export function PartnerPanel({
     }
   }, [presence.latitude, presence.longitude, presence.locationSharingEnabled])
 
+  const title = kind === 'friend' ? 'FRIEND SIGNAL' : 'PARTNER SIGNAL'
+
   if (!partner) {
     return (
-      <PixelModal open={open} title="PARTNER SIGNAL" onClose={onClose}>
+      <PixelModal open={open} title={title} onClose={onClose}>
         <div className="text-center py-4 flex flex-col gap-3">
           <p className="pixel-label" style={{ color: 'var(--spidey-red)', fontSize: 10 }}>
             SPIDER SIGNAL LOST
           </p>
           <p className="font-[family-name:var(--font-readable)] text-xl" style={{ color: 'var(--spidey-text-dim)' }}>
-            Your partner hasn't joined the network yet.
+            {kind === 'friend'
+              ? 'This friend is no longer on your web.'
+              : "Your partner hasn't joined the network yet."}
           </p>
         </div>
       </PixelModal>
@@ -69,14 +76,14 @@ export function PartnerPanel({
     status === 'online' ? '🟢 SPIDER ONLINE' : status === 'fading' ? '🟡 SIGNAL FADING' : '⚫ OFFLINE'
 
   return (
-    <PixelModal open={open} title="PARTNER SIGNAL" onClose={onClose}>
+    <PixelModal open={open} title={title} onClose={onClose}>
       <div className="flex flex-col items-center gap-3 text-center">
         <SpiderAvatar spiderId={partner.spiderId} suitId={partner.suitId} size={80} pulse={status === 'online'} />
         <p className="pixel-label" style={{ color: 'var(--spidey-white)', fontSize: 12 }}>
           {partner.displayName}
         </p>
         <p className="pixel-label" style={{ color: 'var(--spidey-yellow)', fontSize: 8 }}>
-          SUIT: {suit.name}
+          {kind === 'friend' ? 'FRIEND' : 'PARTNER'} · SUIT: {suit.name}
         </p>
         <p className="pixel-label" style={{ color: 'var(--spidey-cyan)', fontSize: 8 }}>
           {statusLabel}
@@ -100,7 +107,13 @@ export function PartnerPanel({
               onClick={onNudge}
               disabled={nudgeBusy || nudgeCooldown}
             >
-              {nudgeCooldown ? 'NUDGE COOLDOWN...' : nudgeBusy ? 'SENDING...' : 'NUDGE PARTNER'}
+              {nudgeCooldown
+                ? 'NUDGE COOLDOWN...'
+                : nudgeBusy
+                  ? 'SENDING...'
+                  : kind === 'friend'
+                    ? 'NUDGE FRIEND'
+                    : 'NUDGE PARTNER'}
             </PixelButton>
           )}
           <div className="flex gap-2 w-full">
@@ -111,7 +124,7 @@ export function PartnerPanel({
             )}
             {onUnlink && (
               <PixelButton variant="red" className="flex-1" onClick={onUnlink}>
-                UNLINK
+                {kind === 'friend' ? 'REMOVE' : 'UNLINK'}
               </PixelButton>
             )}
           </div>

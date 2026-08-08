@@ -20,7 +20,7 @@ import { ensureUserShell, getUserProfile } from '../services/firebase/users'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { requireDb } from '../services/firebase/config'
 import { mapUserDoc } from '../services/firebase/users'
-import { syncPartnerAccess } from '../services/firebase/presence'
+import { syncFriendAccessList, syncPartnerAccess } from '../services/firebase/presence'
 
 type AuthContextValue = {
   user: User | null
@@ -77,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const next = mapUserDoc(user.uid, snap.data() as Record<string, unknown>)
         setProfile(next)
         void syncPartnerAccess(user.uid, next.partnerId)
+        void syncFriendAccessList(user.uid, next.friendIds ?? [])
       }
     })
     return unsub

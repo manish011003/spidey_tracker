@@ -151,3 +151,17 @@ export async function syncPartnerAccess(uid: string, partnerId: string | null): 
   const rtdb = requireRtdb()
   await set(ref(rtdb, `partnerAccess/${uid}/partnerId`), partnerId)
 }
+
+/**
+ * Mirror Firestore friendIds into RTDB under friendAccess/{uid}.
+ * Each user can only write their own node (rules) — call on profile load/update.
+ */
+export async function syncFriendAccessList(uid: string, friendIds: string[]): Promise<void> {
+  const rtdb = requireRtdb()
+  const payload: Record<string, boolean> = {}
+  for (const id of friendIds) {
+    if (id && id !== uid) payload[id] = true
+  }
+  // Replace the whole map so removed friends lose access
+  await set(ref(rtdb, `friendAccess/${uid}`), payload)
+}

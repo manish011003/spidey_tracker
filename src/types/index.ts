@@ -41,6 +41,8 @@ export interface UserPreferences {
   skipBootAnimation: boolean
   locationSharingEnabled: boolean
   preciseLocationEnabled: boolean
+  /** User has dismissed the post-login web guide chart */
+  hasSeenGuide?: boolean
 }
 
 export interface UserProfile {

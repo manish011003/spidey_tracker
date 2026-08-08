@@ -17,7 +17,7 @@ const CONTROLS: Array<{
   { id: 'me', tip: 'MY LOCATION', bg: 'var(--spidey-green)', accent: '#0a1a08' },
   { id: 'partner', tip: 'FIND SPIDER', bg: 'var(--spidey-red)', accent: '#1a0505' },
   { id: 'events', tip: 'EVENTS', bg: 'var(--spidey-yellow)', accent: '#1a1400' },
-  { id: 'info', tip: 'SPIDER INFO', bg: 'var(--spidey-cyan)', accent: '#041218' },
+  { id: 'info', tip: 'WEB GUIDE', bg: 'var(--spidey-cyan)', accent: '#041218' },
 ]
 
 function EventsGlyph() {

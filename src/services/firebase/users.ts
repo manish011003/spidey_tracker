@@ -23,6 +23,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   skipBootAnimation: false,
   locationSharingEnabled: false,
   preciseLocationEnabled: true,
+  hasSeenGuide: false,
 }
 
 function toMillis(value: unknown): number {

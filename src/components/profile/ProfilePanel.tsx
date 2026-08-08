@@ -18,6 +18,7 @@ type Props = {
   onClose: () => void
   onSignOut: () => void
   onOpenPartnerLink: () => void
+  onOpenGuide?: () => void
   sharing: boolean
   precise: boolean
   onToggleSharing: (v: boolean) => void
@@ -60,6 +61,7 @@ export function ProfilePanel({
   onClose,
   onSignOut,
   onOpenPartnerLink,
+  onOpenGuide,
   sharing,
   precise,
   onToggleSharing,
@@ -241,6 +243,19 @@ export function ProfilePanel({
             {profile.partnerCode}
           </p>
         </div>
+
+        {onOpenGuide && (
+          <PixelButton
+            variant="cyan"
+            className="w-full"
+            onClick={() => {
+              playSound('click')
+              onOpenGuide()
+            }}
+          >
+            WEB GUIDE / CHART
+          </PixelButton>
+        )}
 
         <div>
           <p className="pixel-label mb-1" style={{ color: 'var(--spidey-cyan)' }}>

@@ -7,7 +7,7 @@ export type NudgePayload = {
   timestamp: number
 }
 
-/** Send a spider nudge to your linked partner (plays ringtone on their side). */
+/** Send a spider nudge to a partner or friend (plays ringtone on their side). */
 export async function sendPartnerNudge(
   toUid: string,
   fromUid: string,
@@ -20,6 +20,8 @@ export async function sendPartnerNudge(
     timestamp: Date.now(),
   } satisfies NudgePayload)
 }
+
+export const sendSpiderNudge = sendPartnerNudge
 
 /** Listen for incoming nudges addressed to this user. */
 export function subscribeToNudges(

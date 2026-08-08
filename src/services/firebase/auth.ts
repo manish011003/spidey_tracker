@@ -37,7 +37,7 @@ export async function signInWithGoogle(): Promise<User> {
       throw new Error('GOOGLE SIGN-IN NOT ENABLED IN FIREBASE')
     }
     if (code === 'auth/unauthorized-domain') {
-      throw new Error('LOCALHOST NOT AUTHORIZED IN FIREBASE')
+      throw new Error('DOMAIN NOT AUTHORIZED IN FIREBASE')
     }
     if (code === 'auth/configuration-not-found') {
       throw new Error('FIREBASE AUTH NOT SET UP FOR THIS APP')

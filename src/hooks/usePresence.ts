@@ -57,3 +57,27 @@ export function usePartnerPresence(partnerId: string | null | undefined) {
 
   return presence
 }
+
+/** Presence map keyed by uid for multiple spiders (friends). */
+export function useMultiPresence(uids: string[] | undefined) {
+  const [map, setMap] = useState<Record<string, PresenceData>>({})
+  const idsKey = (uids ?? []).slice().sort().join(',')
+
+  useEffect(() => {
+    if (!idsKey || !isFirebaseConfigured) {
+      setMap({})
+      return
+    }
+    const ids = idsKey.split(',')
+    const next: Record<string, PresenceData> = {}
+    const unsubs = ids.map((id) =>
+      subscribeToPresence(id, (data) => {
+        next[id] = data
+        setMap({ ...next })
+      }),
+    )
+    return () => unsubs.forEach((u) => u())
+  }, [idsKey])
+
+  return map
+}

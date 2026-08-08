@@ -26,11 +26,14 @@ type FlyTarget = {
 type Props = {
   user: UserProfile
   partner: UserProfile | null
+  friends?: UserProfile[]
+  friendPresence?: Record<string, PresenceData>
   myPresence: PresenceData | null
   partnerPresence: PresenceData | null
   events: SharedEvent[]
   flyTo: FlyTarget
   onEventClick: (event: SharedEvent) => void
+  onSpiderClick?: (uid: string, kind: 'partner' | 'friend') => void
   now?: number
   mySharingEnabled?: boolean
   onEnableSharing?: () => void
@@ -59,21 +62,37 @@ function MapController({ flyTo }: { flyTo: FlyTarget }) {
 function SignalHud({
   partner,
   partnerPresence,
+  friendCount,
+  visibleFriends,
   mySharingEnabled,
   onEnableSharing,
   now,
 }: {
   partner: UserProfile | null
   partnerPresence: PresenceData | null
+  friendCount: number
+  visibleFriends: number
   mySharingEnabled: boolean
   onEnableSharing?: () => void
   now: number
 }) {
-  if (!partner) {
+  if (!partner && friendCount === 0) {
     return (
       <div className="map-signal-chip" role="status">
         <p className="pixel-label" style={{ color: 'var(--spidey-yellow)', fontSize: 7 }}>
-          AWAITING PARTNER LINK
+          AWAITING PARTNER / FRIEND LINK
+        </p>
+      </div>
+    )
+  }
+
+  if (!partner && friendCount > 0) {
+    return (
+      <div className="map-signal-chip" role="status">
+        <p className="pixel-label" style={{ color: 'var(--spidey-cyan)', fontSize: 7 }}>
+          {visibleFriends > 0
+            ? `${visibleFriends} FRIEND SIGNAL${visibleFriends === 1 ? '' : 'S'} ON MAP`
+            : `${friendCount} FRIEND${friendCount === 1 ? '' : 'S'} · LOCATION CLOAKED`}
         </p>
       </div>
     )
@@ -139,11 +158,14 @@ function SignalHud({
 function TrackerMapInner({
   user,
   partner,
+  friends = [],
+  friendPresence = {},
   myPresence,
   partnerPresence,
   events,
   flyTo,
   onEventClick,
+  onSpiderClick,
   now = Date.now(),
   mySharingEnabled = false,
   onEnableSharing,
@@ -159,6 +181,26 @@ function TrackerMapInner({
     if (myPresence?.latitude == null || myPresence.longitude == null) return null
     return [myPresence.latitude, myPresence.longitude]
   }, [myPresence])
+
+  const friendMarkers = useMemo(() => {
+    return friends
+      .map((f) => {
+        const p = friendPresence[f.uid]
+        if (!p?.locationSharingEnabled) return null
+        if (p.latitude == null || p.longitude == null) return null
+        const status = getPresenceStatus(Boolean(p.online), p.lastSeen, now)
+        const weak =
+          status !== 'online' || (p.timestamp != null && now - p.timestamp > 3 * 60_000)
+        const pulsing = p.speed != null && p.speed > 0.5 && !weak
+        return { friend: f, presence: p, weak, pulsing }
+      })
+      .filter(Boolean) as Array<{
+      friend: UserProfile
+      presence: PresenceData
+      weak: boolean
+      pulsing: boolean
+    }>
+  }, [friends, friendPresence, now])
 
   const partnerStatus = getPresenceStatus(
     Boolean(partnerPresence?.online),
@@ -208,8 +250,26 @@ function TrackerMapInner({
             signalAt={partnerPresence?.timestamp}
             lastSeen={partnerPresence?.lastSeen}
             now={now}
+            onClick={onSpiderClick ? () => onSpiderClick(partner.uid, 'partner') : undefined}
           />
         )}
+
+        {friendMarkers.map(({ friend, presence, weak, pulsing }) => (
+          <PartnerMarker
+            key={friend.uid}
+            position={[presence.latitude!, presence.longitude!]}
+            name={friend.displayName}
+            spiderId={friend.spiderId}
+            suitId={friend.suitId}
+            pulsing={pulsing}
+            weak={weak}
+            signalAt={presence.timestamp}
+            lastSeen={presence.lastSeen}
+            now={now}
+            labelOverride="FRIEND"
+            onClick={onSpiderClick ? () => onSpiderClick(friend.uid, 'friend') : undefined}
+          />
+        ))}
 
         {events.map((ev) => (
           <EventMarker key={ev.id} event={ev} onClick={onEventClick} />
@@ -220,6 +280,8 @@ function TrackerMapInner({
         <SignalHud
           partner={partner}
           partnerPresence={partnerPresence}
+          friendCount={friends.length}
+          visibleFriends={friendMarkers.length}
           mySharingEnabled={mySharingEnabled}
           onEnableSharing={onEnableSharing}
           now={now}

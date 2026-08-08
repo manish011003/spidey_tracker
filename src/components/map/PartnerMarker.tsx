@@ -18,6 +18,9 @@ type Props = {
   /** Presence lastSeen (ms). */
   lastSeen?: number | null
   now?: number
+  /** Override pin caption (e.g. FRIEND). */
+  labelOverride?: string
+  onClick?: () => void
 }
 
 export function createPartnerIcon(
@@ -28,7 +31,7 @@ export function createPartnerIcon(
 ): DivIcon {
   const suit = getSuit(suitId)
   const logo = getSuitLogoUrl(suitId)
-  const labelColor = weak ? '#ffc94a' : signalLabel === 'LIVE' ? '#6fc041' : '#5ce1e6'
+  const labelColor = weak ? '#ffc94a' : signalLabel === 'LIVE' || signalLabel === 'FRIEND' ? '#6fc041' : '#5ce1e6'
   const ring = pulsing
     ? `<span class="map-spidey-pin__ring" style="border-color:${suit.primaryColor}"></span>`
     : ''
@@ -59,11 +62,15 @@ export function PartnerMarker({
   signalAt,
   lastSeen,
   now = Date.now(),
+  labelOverride,
+  onClick,
 }: Props) {
-  const signalLabel = formatSignalLabel(signalAt ?? lastSeen, {
-    weak: Boolean(weak),
-    now,
-  })
+  const signalLabel =
+    labelOverride ??
+    formatSignalLabel(signalAt ?? lastSeen, {
+      weak: Boolean(weak),
+      now,
+    })
 
   const icon = useMemo(
     () => createPartnerIcon(suitId, Boolean(pulsing), Boolean(weak), signalLabel),
@@ -71,7 +78,17 @@ export function PartnerMarker({
   )
 
   return (
-    <Marker position={position} icon={icon}>
+    <Marker
+      position={position}
+      icon={icon}
+      eventHandlers={
+        onClick
+          ? {
+              click: () => onClick(),
+            }
+          : undefined
+      }
+    >
       <Popup className="spidey-popup">
         <div className="spidey-popup__body">
           <strong>{name}</strong>

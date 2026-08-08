@@ -1,0 +1,16 @@
+# Firebase Web Config (from Firebase Console → Project settings)
+VITE_FIREBASE_API_KEY=AIzaSyDAUB22NlOvi5jeE1IeQh626gOGb8_j_-g
+VITE_FIREBASE_AUTH_DOMAIN=spidy-tracker.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=spidy-tracker
+VITE_FIREBASE_STORAGE_BUCKET=spidy-tracker.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=278808310184
+VITE_FIREBASE_APP_ID=1:278808310184:web:6e442656e5fbf144b42d9d
+VITE_FIREBASE_DATABASE_URL=hhttps://spidy-tracker-default-rtdb.asia-southeast1.firebasedatabase.app
+
+# Map tiles (Carto Dark Matter by default — OSM-compatible)
+VITE_MAP_TILE_URL=https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png
+VITE_MAP_ATTRIBUTION=© OpenStreetMap © CARTO
+
+# Geocoding (Nominatim — respect usage policy)
+VITE_GEOCODER_URL=https://nominatim.openstreetmap.org
+VITE_GEOCODER_USER_AGENT=SpideyTracker/1.0 (private couples app)

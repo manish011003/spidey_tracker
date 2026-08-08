@@ -5,20 +5,13 @@ import {
   arrayUnion,
   arrayRemove,
 } from 'firebase/firestore'
-import { ref, set, remove } from 'firebase/database'
 import type { UserProfile } from '../../types'
 import { normalizePartnerCode, isValidPartnerCodeFormat } from '../../utils/partnerCode'
 import { findUserByPartnerCode } from './users'
-import { requireDb, requireRtdb } from './config'
+import { requireDb } from './config'
+import { syncFriendAccessList } from './presence'
 
 const MAX_FRIENDS = 12
-
-async function syncFriendAccess(uid: string, friendId: string, linked: boolean): Promise<void> {
-  const rtdb = requireRtdb()
-  const path = ref(rtdb, `friendAccess/${uid}/${friendId}`)
-  if (linked) await set(path, true)
-  else await remove(path)
-}
 
 /** Add another spider as a friend (not the exclusive BF/GF partner slot). */
 export async function addFriend(
@@ -61,10 +54,8 @@ export async function addFriend(
     })
   })
 
-  await Promise.all([
-    syncFriendAccess(currentUser.uid, friend.uid, true),
-    syncFriendAccess(friend.uid, currentUser.uid, true),
-  ])
+  // Only write own friendAccess node (RTDB rules). Peer syncs on their next profile load.
+  await syncFriendAccessList(currentUser.uid, [...currentUser.friendIds, friend.uid])
 
   return friend
 }
@@ -83,8 +74,8 @@ export async function removeFriend(currentUser: UserProfile, friendId: string): 
       updatedAt: serverTimestamp(),
     })
   })
-  await Promise.all([
-    syncFriendAccess(currentUser.uid, friendId, false),
-    syncFriendAccess(friendId, currentUser.uid, false),
-  ])
+  await syncFriendAccessList(
+    currentUser.uid,
+    currentUser.friendIds.filter((id) => id !== friendId),
+  )
 }

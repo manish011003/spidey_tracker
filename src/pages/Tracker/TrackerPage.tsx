@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { usePartner } from '../../hooks/usePartner'
-import { useMyPresence, usePartnerPresence } from '../../hooks/usePresence'
+import { useFriends } from '../../hooks/useFriends'
+import { useMyPresence, useMultiPresence, usePartnerPresence } from '../../hooks/usePresence'
+import type { NetworkSpider } from '../../components/tracker/TrackerHeader'
+import { removeFriend } from '../../services/firebase/friends'
+import type { PresenceData, SharedEvent, UserProfile } from '../../types'
 import { useLocationSharing } from '../../hooks/useLocationSharing'
 import { useEvents } from '../../hooks/useEvents'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
@@ -16,11 +20,11 @@ import { TrackerMap } from '../../components/map/TrackerMap'
 import { ProfilePanel } from '../../components/profile/ProfilePanel'
 import { PartnerPanel } from '../../components/partner/PartnerPanel'
 import { PartnerLinkModal } from '../../components/partner/PartnerLinkModal'
+import { OnboardingChart } from '../../components/onboarding/OnboardingChart'
 import { EventModal } from '../../components/events/EventModal'
 import { EventInfoPanel } from '../../components/events/EventInfoPanel'
 import { PixelLoader } from '../../components/pixel/PixelLoader'
 import { PixelButton } from '../../components/pixel/PixelButton'
-import type { SharedEvent } from '../../types'
 import { formatDistance, formatRelativeTime, haversineDistanceKm } from '../../utils/geo'
 import { setSoundEnabled, playRingtone, playSound, unlockAudio } from '../../services/sound/audio'
 import { updatePreferences } from '../../services/firebase/users'
@@ -30,8 +34,10 @@ import { isFirebaseConfigured } from '../../services/firebase/config'
 export function TrackerPage() {
   const { profile, loading, signOut, refreshProfile } = useAuth()
   const { partner } = usePartner(profile?.partnerId)
+  const friends = useFriends(profile?.friendIds)
   const myPresence = useMyPresence(profile?.uid)
   const partnerPresence = usePartnerPresence(profile?.partnerId)
+  const friendPresence = useMultiPresence(profile?.friendIds)
   const location = useLocationSharing(profile?.uid, profile?.preferences)
   const { events, addEvent } = useEvents(profile?.relationshipId)
   const online = useOnlineStatus()
@@ -49,7 +55,15 @@ export function TrackerPage() {
   const [nudgeBusy, setNudgeBusy] = useState(false)
   const [nudgeCooldown, setNudgeCooldown] = useState(false)
   const [nudgeBanner, setNudgeBanner] = useState<string | null>(null)
+  const [focusSpider, setFocusSpider] = useState<{
+    profile: UserProfile
+    kind: 'partner' | 'friend'
+  } | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [guideFirstRun, setGuideFirstRun] = useState(false)
   const prevPartnerId = useRef<string | null | undefined>(undefined)
+  const prevFriendCount = useRef<number | undefined>(undefined)
+  const guideAutoShown = useRef(false)
 
   useEffect(() => {
     if (profile) {
@@ -57,6 +71,28 @@ export function TrackerPage() {
       document.documentElement.classList.toggle('reduce-motion', profile.preferences.reduceMotion)
     }
   }, [profile])
+
+  // First tracker visit after login/setup — show onboarding chart once
+  useEffect(() => {
+    if (!profile?.onboardingComplete || guideAutoShown.current) return
+    if (profile.preferences.hasSeenGuide) return
+    guideAutoShown.current = true
+    setGuideFirstRun(true)
+    setGuideOpen(true)
+  }, [profile?.onboardingComplete, profile?.preferences.hasSeenGuide, profile])
+
+  const closeGuide = useCallback(() => {
+    setGuideOpen(false)
+    setGuideFirstRun(false)
+    if (profile && !profile.preferences.hasSeenGuide) {
+      void updatePreferences(profile.uid, { hasSeenGuide: true })
+    }
+  }, [profile])
+
+  const openGuide = useCallback(() => {
+    setGuideFirstRun(false)
+    setGuideOpen(true)
+  }, [])
 
   // First-time pair ringtone for the user who gets linked (incoming link)
   useEffect(() => {
@@ -75,7 +111,23 @@ export function TrackerPage() {
     prevPartnerId.current = next
   }, [profile?.partnerId, profile])
 
-  // Incoming partner nudges
+  // Notify when a new friend joins the web
+  useEffect(() => {
+    if (!profile) return
+    const count = profile.friendIds?.length ?? 0
+    if (prevFriendCount.current === undefined) {
+      prevFriendCount.current = count
+      return
+    }
+    if (count > prevFriendCount.current) {
+      void playRingtone()
+      setNudgeBanner('FRIEND ADDED TO YOUR WEB')
+      window.setTimeout(() => setNudgeBanner(null), 4000)
+    }
+    prevFriendCount.current = count
+  }, [profile?.friendIds?.length, profile])
+
+  // Incoming partner / friend nudges
   useEffect(() => {
     if (!profile?.uid || !isFirebaseConfigured) return
     return subscribeToNudges(profile.uid, (nudge) => {
@@ -85,12 +137,19 @@ export function TrackerPage() {
     })
   }, [profile?.uid])
 
+  const focusPresence: PresenceData = useMemo(() => {
+    if (!focusSpider) return partnerPresence
+    if (focusSpider.kind === 'partner') return partnerPresence
+    return friendPresence[focusSpider.profile.uid] ?? partnerPresence
+  }, [focusSpider, partnerPresence, friendPresence])
+
   const sendNudge = useCallback(async () => {
-    if (!profile?.partnerId || nudgeBusy || nudgeCooldown) return
+    const targetUid = focusSpider?.profile.uid ?? profile?.partnerId
+    if (!profile || !targetUid || nudgeBusy || nudgeCooldown) return
     setNudgeBusy(true)
     try {
       await unlockAudio()
-      await sendPartnerNudge(profile.partnerId, profile.uid, profile.displayName)
+      await sendPartnerNudge(targetUid, profile.uid, profile.displayName)
       playSound('nudge')
       setNudgeCooldown(true)
       window.setTimeout(() => setNudgeCooldown(false), 15_000)
@@ -99,7 +158,7 @@ export function TrackerPage() {
     } finally {
       setNudgeBusy(false)
     }
-  }, [profile, nudgeBusy, nudgeCooldown])
+  }, [profile, focusSpider, nudgeBusy, nudgeCooldown])
 
   const distanceKm = useMemo(() => {
     if (
@@ -128,17 +187,24 @@ export function TrackerPage() {
         ? 'nearby'
         : 'idle'
 
+  const onlineFriends = useMemo(
+    () => friends.filter((f) => friendPresence[f.uid]?.online).length,
+    [friends, friendPresence],
+  )
+
   const tickerMessages = useMemo(() => {
     const msgs: string[] = []
     msgs.push(online ? 'WEB NETWORK: ONLINE' : 'WEB CONNECTION LOST')
     if (partner && partnerPresence.online) msgs.push('TWO SPIDERS ACTIVE')
+    if (friends.length) msgs.push(`${friends.length} FRIEND${friends.length === 1 ? '' : 'S'} ON YOUR WEB`)
+    if (onlineFriends) msgs.push(`${onlineFriends} FRIEND SIGNAL${onlineFriends === 1 ? '' : 'S'} LIVE`)
     if (partner && partnerPresence.online && myPresence.online) msgs.push('SPIDER SENSE: DOUBLE SIGNAL')
     if (nearby) msgs.push('TWO SPIDERS DETECTED IN PROXIMITY')
     if (partnerPresence.locationSharingEnabled && partnerPresence.timestamp) {
       msgs.push(`LAST LOCATION UPDATE: ${formatRelativeTime(partnerPresence.timestamp, now)}`)
     } else if (partner) {
       msgs.push(partnerPresence.locationSharingEnabled ? 'SIGNAL WEAK' : 'PARTNER LOCATION CLOAKED')
-    } else {
+    } else if (!friends.length) {
       msgs.push('AWAITING PARTNER LINK')
     }
     msgs.push(`${events.length} SHARED EVENTS DETECTED`)
@@ -150,6 +216,8 @@ export function TrackerPage() {
     online,
     partner,
     partnerPresence,
+    friends.length,
+    onlineFriends,
     myPresence.online,
     nearby,
     events.length,
@@ -178,17 +246,44 @@ export function TrackerPage() {
     })
   }, [myPresence, location.lastLocal])
 
-  const findSpider = useCallback(() => {
-    if (partnerPresence.latitude == null || partnerPresence.longitude == null) return
-    if (!partnerPresence.locationSharingEnabled) return
-    playSound('signal')
-    setFlyTo({
-      lat: partnerPresence.latitude,
-      lng: partnerPresence.longitude,
-      zoom: 14,
-      nonce: Date.now(),
-    })
-  }, [partnerPresence])
+  const findSpider = useCallback(
+    (presence?: PresenceData | null) => {
+      const p = presence ?? focusPresence ?? partnerPresence
+      if (p.latitude == null || p.longitude == null) return
+      if (!p.locationSharingEnabled) return
+      playSound('signal')
+      setFlyTo({
+        lat: p.latitude,
+        lng: p.longitude,
+        zoom: 14,
+        nonce: Date.now(),
+      })
+    },
+    [focusPresence, partnerPresence],
+  )
+
+  const openSpider = useCallback(
+    (spider: NetworkSpider) => {
+      setFocusSpider({ profile: spider.profile, kind: spider.kind })
+      setPartnerOpen(true)
+      findSpider(spider.presence)
+    },
+    [findSpider],
+  )
+
+  const openSpiderById = useCallback(
+    (uid: string, kind: 'partner' | 'friend') => {
+      if (kind === 'partner' && partner) {
+        openSpider({ profile: partner, kind: 'partner', presence: partnerPresence })
+        return
+      }
+      const friend = friends.find((f) => f.uid === uid)
+      if (friend) {
+        openSpider({ profile: friend, kind: 'friend', presence: friendPresence[uid] })
+      }
+    },
+    [partner, partnerPresence, friends, friendPresence, openSpider],
+  )
 
   const worldView = useCallback(() => {
     setFlyTo({ lat: 20, lng: 0, zoom: 2, nonce: Date.now() })
@@ -200,12 +295,19 @@ export function TrackerPage() {
     if (id === 'me') centerMe()
     if (id === 'partner') {
       if (partner) {
-        findSpider()
+        setFocusSpider({ profile: partner, kind: 'partner' })
+        findSpider(partnerPresence)
         setPartnerOpen(true)
+      } else if (friends[0]) {
+        openSpider({
+          profile: friends[0],
+          kind: 'friend',
+          presence: friendPresence[friends[0].uid],
+        })
       } else setLinkOpen(true)
     }
     if (id === 'events') setEventOpen(true)
-    if (id === 'info') setProfileOpen(true)
+    if (id === 'info') openGuide()
   }
 
   const onLogoClick = () => {
@@ -264,12 +366,21 @@ export function TrackerPage() {
           <TrackerHeader
             user={profile}
             partner={partner}
+            friends={friends}
+            friendPresence={friendPresence}
+            partnerPresence={partnerPresence}
             userOnline={myPresence.online}
             partnerOnline={partnerPresence.online}
             partnerLastSeen={partnerPresence.lastSeen}
             now={now}
             onUserClick={() => setProfileOpen(true)}
-            onPartnerClick={() => (partner ? setPartnerOpen(true) : setLinkOpen(true))}
+            onPartnerClick={() => {
+              if (partner) {
+                setFocusSpider({ profile: partner, kind: 'partner' })
+                setPartnerOpen(true)
+              } else setLinkOpen(true)
+            }}
+            onSelectSpider={openSpider}
             onLogoClick={onLogoClick}
           />
         }
@@ -277,18 +388,21 @@ export function TrackerPage() {
           <SideControls
             active={activeControl}
             onSelect={onControl}
-            partnerOnline={partnerPresence.online}
+            partnerOnline={partnerPresence.online || onlineFriends > 0}
           />
         }
         map={
           <TrackerMap
             user={profile}
             partner={partner}
+            friends={friends}
+            friendPresence={friendPresence}
             myPresence={myPresence}
             partnerPresence={partnerPresence}
             events={events}
             flyTo={flyTo}
             onEventClick={setSelectedEvent}
+            onSpiderClick={openSpiderById}
             now={now}
             mySharingEnabled={location.sharing}
             onEnableSharing={() => void location.setSharing(true)}
@@ -297,19 +411,26 @@ export function TrackerPage() {
         toolbar={
           <MapToolbar
             onCenterMe={centerMe}
-            onFindSpider={findSpider}
+            onFindSpider={() => findSpider()}
             onWorldView={worldView}
             onEvents={() => setEventOpen(true)}
             onLocation={() => setProfileOpen(true)}
             hasPartnerLocation={Boolean(
-              partnerPresence.locationSharingEnabled &&
-                partnerPresence.latitude != null &&
-                partnerPresence.longitude != null,
+              (focusPresence?.locationSharingEnabled &&
+                focusPresence.latitude != null &&
+                focusPresence.longitude != null) ||
+                (partnerPresence.locationSharingEnabled &&
+                  partnerPresence.latitude != null &&
+                  partnerPresence.longitude != null) ||
+                friends.some((f) => {
+                  const p = friendPresence[f.uid]
+                  return p?.locationSharingEnabled && p.latitude != null && p.longitude != null
+                }),
             )}
           />
         }
         linkAction={
-          !profile.partnerId ? (
+          !profile.partnerId && !(profile.friendIds?.length) ? (
             <div className="flex justify-center">
               <PixelButton className="!text-[8px] !py-2.5 !px-4 w-full max-w-xs" onClick={() => setLinkOpen(true)}>
                 LINK PARTNER / FRIEND
@@ -330,6 +451,8 @@ export function TrackerPage() {
         }
       />
 
+      <OnboardingChart open={guideOpen} onClose={closeGuide} firstRun={guideFirstRun} />
+
       <ProfilePanel
         open={profileOpen}
         profile={profile}
@@ -342,6 +465,10 @@ export function TrackerPage() {
           setProfileOpen(false)
           setLinkOpen(true)
         }}
+        onOpenGuide={() => {
+          setProfileOpen(false)
+          openGuide()
+        }}
         sharing={location.sharing}
         precise={location.precise}
         onToggleSharing={(v) => void location.setSharing(v)}
@@ -350,16 +477,30 @@ export function TrackerPage() {
 
       <PartnerPanel
         open={partnerOpen}
-        partner={partner}
-        presence={partnerPresence}
+        partner={focusSpider?.profile ?? partner}
+        kind={focusSpider?.kind ?? 'partner'}
+        presence={focusPresence}
         now={now}
-        onClose={() => setPartnerOpen(false)}
-        onFind={findSpider}
+        onClose={() => {
+          setPartnerOpen(false)
+          setFocusSpider(null)
+        }}
+        onFind={() => findSpider(focusPresence)}
         onNudge={() => void sendNudge()}
         nudgeBusy={nudgeBusy}
         nudgeCooldown={nudgeCooldown}
         onUnlink={() => {
+          const kind = focusSpider?.kind ?? 'partner'
+          const target = focusSpider?.profile ?? partner
           setPartnerOpen(false)
+          if (kind === 'friend' && target && profile) {
+            void removeFriend(profile, target.uid)
+              .then(() => refreshProfile())
+              .catch(() => playSound('error'))
+            setFocusSpider(null)
+            return
+          }
+          setFocusSpider(null)
           setLinkOpen(true)
         }}
       />
