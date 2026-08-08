@@ -1,5 +1,7 @@
 # SPIDEY TRACKER
 
+<img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/92e80f59-3b7e-4156-87ea-bd11e68c4eea" />
+
 Private couples / friends web app with a homemade **pixel Spider HUD**: dark map, live presence, missions, quizzes, and spider-code invites.
 
 **MADE BY MANISH** · `SPIDEY TRACKER // PRIVATE NETWORK`
@@ -7,6 +9,8 @@ Private couples / friends web app with a homemade **pixel Spider HUD**: dark map
 Live (example): [spidey-tracker-pi.vercel.app](https://spidey-tracker-pi.vercel.app)
 
 ---
+<img width="2828" height="2228" alt="screencapture-spidey-tracker-pi-vercel-app-tracker-2026-08-09-04_09_53" src="https://github.com/user-attachments/assets/76f3b1ca-2f7d-46bf-abda-73dcab9c5ee5" />
+
 
 ## Docs map
 
