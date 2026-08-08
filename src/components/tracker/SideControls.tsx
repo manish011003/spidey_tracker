@@ -15,7 +15,7 @@ const CONTROLS: Array<{
   accent: string
 }> = [
   { id: 'me', tip: 'MY LOCATION', bg: 'var(--spidey-green)', accent: '#0a1a08' },
-  { id: 'partner', tip: 'FIND SPIDER', bg: 'var(--spidey-red)', accent: '#1a0505' },
+  { id: 'partner', tip: 'CYCLE SPIDERS', bg: 'var(--spidey-red)', accent: '#1a0505' },
   { id: 'events', tip: 'EVENTS', bg: 'var(--spidey-yellow)', accent: '#1a1400' },
   { id: 'info', tip: 'WEB GUIDE', bg: 'var(--spidey-cyan)', accent: '#041218' },
 ]
@@ -72,7 +72,7 @@ export function SideControls({ active, onSelect, partnerOnline }: Props) {
             )}
             <span className="side-control__tip" role="tooltip">
               {c.tip}
-              {c.id === 'partner' && partnerOnline ? ' · ONLINE' : ''}
+              {c.id === 'partner' && partnerOnline ? ' · SIGNALS LIVE' : ''}
             </span>
           </button>
         )

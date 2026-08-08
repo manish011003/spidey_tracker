@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, memo } from 'react'
+import { latLngBounds } from 'leaflet'
 import { MapContainer, TileLayer, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { SharedEvent, UserProfile, PresenceData } from '../../types'
@@ -18,11 +19,15 @@ const ATTRIBUTION =
   (import.meta.env.VITE_MAP_ATTRIBUTION as string | undefined) ??
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
 
-type FlyTarget = {
+export type FlyTarget = {
   lat: number
   lng: number
   zoom?: number
   nonce: number
+  /** Optional: zoom out to these points first, then fly to lat/lng. */
+  overviewPoints?: Array<[number, number]>
+  /** Open this spider pin popup after focus. */
+  openPopupUid?: string | null
 } | null
 
 type Props = {
@@ -34,6 +39,8 @@ type Props = {
   partnerPresence: PresenceData | null
   events: SharedEvent[]
   flyTo: FlyTarget
+  openPopupUid?: string | null
+  popupDelayMs?: number
   onEventClick: (event: SharedEvent) => void
   onSpiderClick?: (uid: string, kind: 'partner' | 'friend') => void
   discoveries?: DiscoveryDef[]
@@ -52,9 +59,30 @@ function MapController({ flyTo }: { flyTo: FlyTarget }) {
   useEffect(() => {
     if (!flyTo || flyTo.nonce === lastNonce.current) return
     lastNonce.current = flyTo.nonce
-    map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom ?? Math.max(map.getZoom(), 12), {
-      duration: 1.2,
-    })
+
+    const focusZoom = flyTo.zoom ?? Math.max(map.getZoom(), 14)
+    const focus = () => {
+      map.flyTo([flyTo.lat, flyTo.lng], focusZoom, { duration: 1.1 })
+    }
+
+    const overview = flyTo.overviewPoints?.filter(
+      (p) => Number.isFinite(p[0]) && Number.isFinite(p[1]),
+    )
+    if (overview && overview.length >= 2) {
+      let focusTimer: number | undefined
+      const onOverviewEnd = () => {
+        focusTimer = window.setTimeout(focus, 200)
+      }
+      map.once('moveend', onOverviewEnd)
+      const bounds = latLngBounds(overview)
+      map.fitBounds(bounds.pad(0.45), { animate: true, duration: 0.9, maxZoom: 12 })
+      return () => {
+        map.off('moveend', onOverviewEnd)
+        if (focusTimer != null) window.clearTimeout(focusTimer)
+      }
+    }
+
+    focus()
   }, [flyTo, map])
 
   useEffect(() => {
@@ -170,6 +198,8 @@ function TrackerMapInner({
   partnerPresence,
   events,
   flyTo,
+  openPopupUid = null,
+  popupDelayMs = 900,
   onEventClick,
   onSpiderClick,
   discoveries = [],
@@ -180,6 +210,8 @@ function TrackerMapInner({
   mySharingEnabled = false,
   onEnableSharing,
 }: Props) {
+  const activePopupUid = openPopupUid ?? flyTo?.openPopupUid ?? null
+  const popupKey = flyTo?.nonce ?? 0
   const partnerPos = useMemo<[number, number] | null>(() => {
     if (!partnerPresence?.locationSharingEnabled) return null
     if (partnerPresence.latitude == null || partnerPresence.longitude == null) return null
@@ -249,6 +281,9 @@ function TrackerMapInner({
             name={user.displayName}
             spiderId={user.spiderId}
             suitId={user.suitId}
+            popupOpen={activePopupUid === user.uid}
+            popupKey={popupKey}
+            popupDelayMs={popupDelayMs}
           />
         )}
 
@@ -264,6 +299,9 @@ function TrackerMapInner({
             lastSeen={partnerPresence?.lastSeen}
             now={now}
             roleTag="PARTNER"
+            popupOpen={activePopupUid === partner.uid}
+            popupKey={popupKey}
+            popupDelayMs={popupDelayMs}
             onClick={onSpiderClick ? () => onSpiderClick(partner.uid, 'partner') : undefined}
           />
         )}
@@ -281,6 +319,9 @@ function TrackerMapInner({
             lastSeen={presence.lastSeen}
             now={now}
             roleTag="FRIEND"
+            popupOpen={activePopupUid === friend.uid}
+            popupKey={popupKey}
+            popupDelayMs={popupDelayMs}
             onClick={onSpiderClick ? () => onSpiderClick(friend.uid, 'friend') : undefined}
           />
         ))}

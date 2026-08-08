@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { DivIcon } from 'leaflet'
+import { useEffect, useMemo, useRef } from 'react'
+import { DivIcon, type Marker as LeafletMarker } from 'leaflet'
 import { Marker, Popup } from 'react-leaflet'
 import type { SuitId, SpiderId } from '../../types'
 import { getSuit } from '../../data/suits'
@@ -20,6 +20,12 @@ type Props = {
   now?: number
   /** Small role chip on pin (PARTNER / FRIEND) — signal label stays LIVE-style. */
   roleTag?: 'PARTNER' | 'FRIEND'
+  /** When true, open the Leaflet popup (same content as hover/click). */
+  popupOpen?: boolean
+  /** Bumps when focus changes so popup re-opens after fly. */
+  popupKey?: number
+  /** Delay before opening (lets map fly/overview finish). */
+  popupDelayMs?: number
   onClick?: () => void
 }
 
@@ -68,8 +74,12 @@ export function PartnerMarker({
   lastSeen,
   now = Date.now(),
   roleTag,
+  popupOpen = false,
+  popupKey = 0,
+  popupDelayMs = 900,
   onClick,
 }: Props) {
+  const markerRef = useRef<LeafletMarker | null>(null)
   const signalLabel = formatSignalLabel(signalAt ?? lastSeen, {
     weak: Boolean(weak),
     now,
@@ -80,15 +90,26 @@ export function PartnerMarker({
     [suitId, pulsing, weak, signalLabel, roleTag],
   )
 
+  useEffect(() => {
+    const marker = markerRef.current
+    if (!marker) return
+    if (popupOpen) {
+      const t = window.setTimeout(() => marker.openPopup(), popupDelayMs)
+      return () => window.clearTimeout(t)
+    }
+    marker.closePopup()
+  }, [popupOpen, popupKey, popupDelayMs, position[0], position[1]])
+
   return (
     <Marker
+      ref={markerRef}
       position={position}
       icon={icon}
       eventHandlers={{
         click: () => onClick?.(),
       }}
     >
-      <Popup className="spidey-popup">
+      <Popup className="spidey-popup" autoPan={false}>
         <div className="spidey-popup__body">
           <strong>{name}</strong>
           {roleTag ? (

@@ -9,7 +9,6 @@ type Props = {
   onQuiz?: () => void
   onMissions?: () => void
   onFriends?: () => void
-  hasPartnerLocation: boolean
 }
 
 /**
@@ -24,7 +23,6 @@ export function MapToolbar({
   onQuiz,
   onMissions,
   onFriends,
-  hasPartnerLocation,
 }: Props) {
   return (
     <div className="map-toolbar w-full" role="toolbar" aria-label="Map actions">
@@ -36,7 +34,6 @@ export function MapToolbar({
           variant="orange"
           className="!text-[7px] !py-2.5 !px-3 w-full"
           onClick={onFindSpider}
-          disabled={!hasPartnerLocation}
         >
           FIND SPIDER
         </PixelButton>
@@ -75,7 +72,6 @@ export function MapToolbar({
             variant="orange"
             className="!text-[7px] !py-2.5 !px-2 w-full"
             onClick={onFindSpider}
-            disabled={!hasPartnerLocation}
           >
             FIND SPIDER
           </PixelButton>

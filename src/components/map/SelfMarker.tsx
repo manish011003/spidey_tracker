@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { DivIcon } from 'leaflet'
+import { useEffect, useMemo, useRef } from 'react'
+import { DivIcon, type Marker as LeafletMarker } from 'leaflet'
 import { Marker, Popup } from 'react-leaflet'
 import type { SuitId, SpiderId } from '../../types'
 import { getSuitLogoUrl } from '../../assets/spiders/SpiderAvatar'
@@ -9,6 +9,9 @@ type Props = {
   name: string
   spiderId?: SpiderId
   suitId?: SuitId
+  popupOpen?: boolean
+  popupKey?: number
+  popupDelayMs?: number
 }
 
 export function createSelfIcon(suitId: SuitId = 'classic'): DivIcon {
@@ -26,12 +29,30 @@ export function createSelfIcon(suitId: SuitId = 'classic'): DivIcon {
   })
 }
 
-export function SelfMarker({ position, name, suitId = 'classic' }: Props) {
+export function SelfMarker({
+  position,
+  name,
+  suitId = 'classic',
+  popupOpen = false,
+  popupKey = 0,
+  popupDelayMs = 900,
+}: Props) {
+  const markerRef = useRef<LeafletMarker | null>(null)
   const icon = useMemo(() => createSelfIcon(suitId), [suitId])
 
+  useEffect(() => {
+    const marker = markerRef.current
+    if (!marker) return
+    if (popupOpen) {
+      const t = window.setTimeout(() => marker.openPopup(), popupDelayMs)
+      return () => window.clearTimeout(t)
+    }
+    marker.closePopup()
+  }, [popupOpen, popupKey, popupDelayMs, position[0], position[1]])
+
   return (
-    <Marker position={position} icon={icon}>
-      <Popup className="spidey-popup">
+    <Marker ref={markerRef} position={position} icon={icon}>
+      <Popup className="spidey-popup" autoPan={false}>
         <div className="spidey-popup__body">
           <strong>YOU — {name}</strong>
           <br />

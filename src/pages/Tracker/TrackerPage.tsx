@@ -27,6 +27,8 @@ import { FriendsHub } from '../../components/adventure/FriendsHub'
 import { QuizModal } from '../../components/adventure/QuizModal'
 import { MissionsPanel } from '../../components/adventure/MissionsPanel'
 import { DiscoveriesPanel } from '../../components/adventure/DiscoveriesPanel'
+import { FindSpiderPanel } from '../../components/tracker/FindSpiderPanel'
+import type { FlyTarget } from '../../components/map/TrackerMap'
 import { normalizeAdventure, grantAchievement, bumpMission } from '../../services/firebase/adventure'
 import { EventModal } from '../../components/events/EventModal'
 import { EventInfoPanel } from '../../components/events/EventInfoPanel'
@@ -63,7 +65,9 @@ export function TrackerPage() {
   const [eventOpen, setEventOpen] = useState(false)
   const [eventsListOpen, setEventsListOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<SharedEvent | null>(null)
-  const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom?: number; nonce: number } | null>(null)
+  const [flyTo, setFlyTo] = useState<FlyTarget>(null)
+  const [openPopupUid, setOpenPopupUid] = useState<string | null>(null)
+  const [popupDelayMs, setPopupDelayMs] = useState(900)
   const [logoTaps, setLogoTaps] = useState(0)
   const [easterEgg, setEasterEgg] = useState(false)
   const [nudgeBusy, setNudgeBusy] = useState(false)
@@ -77,12 +81,14 @@ export function TrackerPage() {
   const [guideFirstRun, setGuideFirstRun] = useState(false)
   const [characterOpen, setCharacterOpen] = useState(false)
   const [friendsHubOpen, setFriendsHubOpen] = useState(false)
+  const [findSpiderOpen, setFindSpiderOpen] = useState(false)
   const [quizOpen, setQuizOpen] = useState(false)
   const [missionsOpen, setMissionsOpen] = useState(false)
   const [discoveriesOpen, setDiscoveriesOpen] = useState(false)
   const prevPartnerId = useRef<string | null | undefined>(undefined)
   const prevFriendCount = useRef<number | undefined>(undefined)
   const guideAutoShown = useRef(false)
+  const spiderTourIndex = useRef(-1)
   const adventure = useMemo(
     () => (profile ? normalizeAdventure(profile.adventure) : null),
     [profile],
@@ -253,46 +259,140 @@ export function TrackerPage() {
   ])
 
   const centerMe = useCallback(() => {
+    const uid = profile?.uid ?? null
     if (myPresence.latitude == null || myPresence.longitude == null) {
       if (location.lastLocal) {
+        setOpenPopupUid(uid)
         setFlyTo({
           lat: location.lastLocal.latitude,
           lng: location.lastLocal.longitude,
           zoom: 14,
           nonce: Date.now(),
+          openPopupUid: uid,
         })
       }
       return
     }
+    setOpenPopupUid(uid)
     setFlyTo({
       lat: myPresence.latitude,
       lng: myPresence.longitude,
       zoom: 14,
       nonce: Date.now(),
+      openPopupUid: uid,
     })
-  }, [myPresence, location.lastLocal])
+  }, [myPresence, location.lastLocal, profile?.uid])
+
+  const mapSpiders = useMemo(() => {
+    const list: Array<{
+      uid: string
+      kind: 'self' | 'partner' | 'friend'
+      lat: number
+      lng: number
+      profile: UserProfile
+    }> = []
+    if (
+      profile &&
+      myPresence.locationSharingEnabled &&
+      myPresence.latitude != null &&
+      myPresence.longitude != null
+    ) {
+      list.push({
+        uid: profile.uid,
+        kind: 'self',
+        lat: myPresence.latitude,
+        lng: myPresence.longitude,
+        profile,
+      })
+    }
+    if (
+      partner &&
+      partnerPresence.locationSharingEnabled &&
+      partnerPresence.latitude != null &&
+      partnerPresence.longitude != null
+    ) {
+      list.push({
+        uid: partner.uid,
+        kind: 'partner',
+        lat: partnerPresence.latitude,
+        lng: partnerPresence.longitude,
+        profile: partner,
+      })
+    }
+    for (const f of friends) {
+      if (partner && f.uid === partner.uid) continue
+      const p = friendPresence[f.uid]
+      if (!p?.locationSharingEnabled || p.latitude == null || p.longitude == null) continue
+      list.push({
+        uid: f.uid,
+        kind: 'friend',
+        lat: p.latitude,
+        lng: p.longitude,
+        profile: f,
+      })
+    }
+    return list
+  }, [profile, myPresence, partner, partnerPresence, friends, friendPresence])
 
   const findSpider = useCallback(
-    (presence?: PresenceData | null) => {
+    (presence?: PresenceData | null, uid?: string | null) => {
       const p = presence ?? focusPresence ?? partnerPresence
       if (p.latitude == null || p.longitude == null) return
       if (!p.locationSharingEnabled) return
       playSound('signal')
+      const popupUid = uid ?? focusSpider?.profile.uid ?? profile?.partnerId ?? null
+      setOpenPopupUid(popupUid)
       setFlyTo({
         lat: p.latitude,
         lng: p.longitude,
         zoom: 14,
         nonce: Date.now(),
+        openPopupUid: popupUid,
       })
     },
-    [focusPresence, partnerPresence],
+    [focusPresence, partnerPresence, focusSpider, profile?.partnerId],
   )
+
+  /** Red side orb: overview all map spiders, then cycle focus + popup each press. */
+  const cycleMapSpiders = useCallback(() => {
+    if (mapSpiders.length === 0) {
+      playSound('error')
+      setFindSpiderOpen(true)
+      setNudgeBanner('NO SPIDERS ON MAP — SEARCH / ADD FRIENDS')
+      window.setTimeout(() => setNudgeBanner(null), 3500)
+      return
+    }
+
+    const prev = spiderTourIndex.current
+    const next = (prev + 1) % mapSpiders.length
+    spiderTourIndex.current = next
+    const target = mapSpiders[next]
+    const showOverview = (prev < 0 || next === 0) && mapSpiders.length > 1
+
+    playSound('signal')
+    setPopupDelayMs(showOverview ? 2300 : 1000)
+    setOpenPopupUid(target.uid)
+    setFlyTo({
+      lat: target.lat,
+      lng: target.lng,
+      zoom: 15,
+      nonce: Date.now(),
+      openPopupUid: target.uid,
+      overviewPoints: showOverview
+        ? mapSpiders.map((s) => [s.lat, s.lng] as [number, number])
+        : undefined,
+    })
+
+    if (target.kind === 'partner' || target.kind === 'friend') {
+      setFocusSpider({ profile: target.profile, kind: target.kind })
+    }
+  }, [mapSpiders])
 
   const openSpider = useCallback(
     (spider: NetworkSpider) => {
       setFocusSpider({ profile: spider.profile, kind: spider.kind })
       setPartnerOpen(true)
-      findSpider(spider.presence)
+      findSpider(spider.presence, spider.profile.uid)
     },
     [findSpider],
   )
@@ -312,26 +412,19 @@ export function TrackerPage() {
   )
 
   const worldView = useCallback(() => {
+    setOpenPopupUid(null)
     setFlyTo({ lat: 20, lng: 0, zoom: 2, nonce: Date.now() })
   }, [])
 
   const onControl = (id: ControlId) => {
     setActiveControl(id)
     playSound('click')
-    if (id === 'me') centerMe()
-    if (id === 'partner') {
-      if (partner) {
-        setFocusSpider({ profile: partner, kind: 'partner' })
-        findSpider(partnerPresence)
-        setPartnerOpen(true)
-      } else if (friends[0]) {
-        openSpider({
-          profile: friends[0],
-          kind: 'friend',
-          presence: friendPresence[friends[0].uid],
-        })
-      } else setLinkOpen(true)
+    if (id === 'me') {
+      setOpenPopupUid(profile?.uid ?? null)
+      centerMe()
+      if (profile?.uid) setOpenPopupUid(profile.uid)
     }
+    if (id === 'partner') cycleMapSpiders()
     if (id === 'events') setEventsListOpen(true)
     if (id === 'info') openGuide()
   }
@@ -439,6 +532,8 @@ export function TrackerPage() {
             partnerPresence={partnerPresence}
             events={events}
             flyTo={flyTo}
+            openPopupUid={openPopupUid}
+            popupDelayMs={popupDelayMs}
             onEventClick={setSelectedEvent}
             onSpiderClick={openSpiderById}
             discoveries={nearbyDiscoveries.discoveries}
@@ -453,25 +548,16 @@ export function TrackerPage() {
         toolbar={
           <MapToolbar
             onCenterMe={centerMe}
-            onFindSpider={() => findSpider()}
+            onFindSpider={() => {
+              playSound('click')
+              setFindSpiderOpen(true)
+            }}
             onWorldView={worldView}
             onEvents={() => setEventsListOpen(true)}
             onLocation={() => setProfileOpen(true)}
             onQuiz={() => setQuizOpen(true)}
             onMissions={() => setMissionsOpen(true)}
             onFriends={() => setFriendsHubOpen(true)}
-            hasPartnerLocation={Boolean(
-              (focusPresence?.locationSharingEnabled &&
-                focusPresence.latitude != null &&
-                focusPresence.longitude != null) ||
-                (partnerPresence.locationSharingEnabled &&
-                  partnerPresence.latitude != null &&
-                  partnerPresence.longitude != null) ||
-                friends.some((f) => {
-                  const p = friendPresence[f.uid]
-                  return p?.locationSharingEnabled && p.latitude != null && p.longitude != null
-                }),
-            )}
           />
         }
         linkAction={
@@ -519,6 +605,40 @@ export function TrackerPage() {
           setFriendsHubOpen(true)
         }}
         onChanged={() => void refreshProfile()}
+      />
+
+      <FindSpiderPanel
+        open={findSpiderOpen}
+        profile={profile}
+        partner={partner}
+        partnerPresence={partnerPresence}
+        friends={friends}
+        friendPresence={friendPresence}
+        now={now}
+        onClose={() => setFindSpiderOpen(false)}
+        onChanged={() => void refreshProfile()}
+        onOpenFriendsHub={() => setFriendsHubOpen(true)}
+        onSelect={(target) => {
+          setFindSpiderOpen(false)
+          setFocusSpider({ profile: target.profile, kind: target.kind })
+          const p = target.presence
+          if (p?.locationSharingEnabled && p.latitude != null && p.longitude != null) {
+            setPopupDelayMs(1000)
+            setOpenPopupUid(target.uid)
+            setFlyTo({
+              lat: p.latitude,
+              lng: p.longitude,
+              zoom: 15,
+              nonce: Date.now(),
+              openPopupUid: target.uid,
+            })
+            setPartnerOpen(true)
+          } else {
+            setPartnerOpen(true)
+            setNudgeBanner('LOCATION CLOAKED — SPIDER NOT ON MAP')
+            window.setTimeout(() => setNudgeBanner(null), 3000)
+          }
+        }}
       />
 
       <FriendsHub
