@@ -10,7 +10,7 @@ import {
 } from 'react'
 import type { User } from 'firebase/auth'
 import type { UserProfile } from '../types'
-import { isFirebaseConfigured } from '../services/firebase/config'
+import { isFirebaseConfigured, requireAuth } from '../services/firebase/config'
 import {
   clearRedirectPending,
   handleRedirectResult,
@@ -86,6 +86,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (cancelled) return
 
+      // If redirect already signed us in, attach immediately
+      try {
+        const current = requireAuth().currentUser
+        if (current) {
+          clearRedirectPending()
+          setReturningFromGoogle(false)
+        }
+      } catch {
+        /* ignore */
+      }
+
       unsub = subscribeToAuth((next) => {
         const gen = ++shellGen.current
         setUser(next)
@@ -95,22 +106,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setInitializing(false)
           setSigningIn(false)
 
-          // Redirect returned with no session (Safari Private / partitioned storage).
-          // Force popup on the next tap and tell the user clearly.
           if (isRedirectPending()) {
             if (pendingWatch) window.clearTimeout(pendingWatch)
+            // Give mobile Safari time to hydrate session after same-origin redirect
             pendingWatch = window.setTimeout(() => {
               if (cancelled) return
+              try {
+                if (requireAuth().currentUser) return
+              } catch {
+                /* ignore */
+              }
               if (isRedirectPending()) {
                 clearRedirectPending()
                 setReturningFromGoogle(false)
                 setSigningIn(false)
                 setInitializing(false)
-                setError(
-                  'SAFARI BLOCKED REDIRECT LOGIN — TAP SIGN IN AGAIN (AVOID PRIVATE TAB IF IT FAILS)',
-                )
+                setError('SIGN-IN DID NOT COMPLETE — TAP SIGN IN AGAIN')
               }
-            }, 4_000)
+            }, 12_000)
           }
           return
         }
@@ -213,7 +226,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null)
       setUser(null)
       setInitializing(false)
-      // Full reload avoids sticky mobile auth / SPA state after logout
       hardResetToLogin()
     }
   }, [])

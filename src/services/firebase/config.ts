@@ -10,9 +10,24 @@ import {
 import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore'
 import { getDatabase, type Database } from 'firebase/database'
 
+const envAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined
+
+/**
+ * On Vercel (and any non-localhost host), use the page hostname as authDomain
+ * so Google redirect stays same-origin via the `/__/auth` proxy in vercel.json.
+ * Cross-origin authDomain (*.firebaseapp.com) is what breaks mobile Safari login.
+ */
+function resolveAuthDomain(fallback: string | undefined): string | undefined {
+  if (!fallback) return fallback
+  if (typeof window === 'undefined') return fallback
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1') return fallback
+  return host
+}
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
+  authDomain: resolveAuthDomain(envAuthDomain),
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
@@ -36,8 +51,6 @@ let rtdb: Database | null = null
 if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig)
 
-  // Mobile Google redirect REQUIRES browserPopupRedirectResolver.
-  // Plain getAuth() often "succeeds" on Google then returns with no session on iOS/Android.
   try {
     auth = initializeAuth(app, {
       persistence: [indexedDBLocalPersistence, browserLocalPersistence],
