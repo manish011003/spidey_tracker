@@ -10,34 +10,19 @@ import {
 import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore'
 import { getDatabase, type Database } from 'firebase/database'
 
-const envAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined
-
 /**
- * Hosts that have Google OAuth redirect URIs registered for:
- *   https://{host}/__/auth/handler
- * Plus a Vercel rewrite of `/__/auth/*` → firebaseapp.com (see vercel.json).
+ * Always use the Firebase-hosted authDomain from env.
  *
- * Preview URLs (*.vercel.app deploy hashes) must NOT override authDomain —
- * they send redirect_uri=https://preview-host/__/auth/handler which Google rejects.
+ * Using the Vercel hostname as authDomain forces Google OAuth redirect_uri=
+ *   https://spidey-tracker-pi.vercel.app/__/auth/handler
+ * which Google is currently rejecting (redirect_uri_mismatch) even when it
+ * appears in the OAuth client UI. The default
+ *   https://spidy-tracker.firebaseapp.com/__/auth/handler
+ * is the URI Firebase registers with Google and is reliable.
  */
-const SAME_ORIGIN_AUTH_HOSTS = new Set(['spidey-tracker-pi.vercel.app'])
-
-/**
- * Production: page hostname as authDomain (same-origin via `/__/auth` proxy).
- * Local / preview / unknown: Firebase hosted authDomain from env.
- */
-function resolveAuthDomain(fallback: string | undefined): string | undefined {
-  if (!fallback) return fallback
-  if (typeof window === 'undefined') return fallback
-  const host = window.location.hostname
-  if (host === 'localhost' || host === '127.0.0.1') return fallback
-  if (SAME_ORIGIN_AUTH_HOSTS.has(host)) return host
-  return fallback
-}
-
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
-  authDomain: resolveAuthDomain(envAuthDomain),
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
@@ -71,9 +56,8 @@ if (isFirebaseConfigured) {
   }
 
   if (typeof window !== 'undefined') {
-    const domain = firebaseConfig.authDomain
     console.info(
-      `[auth] authDomain=${domain} · Google redirect must be https://${domain}/__/auth/handler`,
+      `[auth] authDomain=${firebaseConfig.authDomain} · redirect https://${firebaseConfig.authDomain}/__/auth/handler`,
     )
   }
 

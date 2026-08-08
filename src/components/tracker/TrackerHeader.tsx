@@ -27,6 +27,9 @@ type Props = {
   /** Pick a spider from the network dropdown */
   onSelectSpider: (spider: NetworkSpider) => void
   onLogoClick: () => void
+  /** Total onboarded spiders on the platform */
+  platformCount?: number | null
+  onPlatformCountClick?: () => void
 }
 
 function StatusDot({ status }: { status: PresenceStatus }) {
@@ -72,6 +75,8 @@ export function TrackerHeader({
   onPartnerClick,
   onSelectSpider,
   onLogoClick,
+  platformCount = null,
+  onPlatformCountClick,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -156,26 +161,46 @@ export function TrackerHeader({
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={onLogoClick}
-        className="pixel-title-plate flex items-center gap-1 sm:gap-2 mx-1 shrink min-w-0"
-        aria-label="Spidey Tracker"
-      >
-        <span
-          className="font-[family-name:var(--font-pixel)] text-[clamp(7px,2vw,12px)] truncate"
-          style={{ color: 'var(--spidey-white)', textShadow: '2px 2px 0 #020810' }}
+      <div className="flex flex-col items-center mx-1 shrink min-w-0 gap-0.5">
+        <button
+          type="button"
+          onClick={onLogoClick}
+          className="pixel-title-plate flex items-center gap-1 sm:gap-2"
+          aria-label="Spidey Tracker"
         >
-          SPIDEY
-        </span>
-        <SpiderMaskIcon size={20} />
-        <span
-          className="font-[family-name:var(--font-pixel)] text-[clamp(7px,2vw,12px)] truncate"
-          style={{ color: 'var(--spidey-white)', textShadow: '2px 2px 0 #020810' }}
-        >
-          TRACKER
-        </span>
-      </button>
+          <span
+            className="font-[family-name:var(--font-pixel)] text-[clamp(7px,2vw,12px)] truncate"
+            style={{ color: 'var(--spidey-white)', textShadow: '2px 2px 0 #020810' }}
+          >
+            SPIDEY
+          </span>
+          <SpiderMaskIcon size={20} />
+          <span
+            className="font-[family-name:var(--font-pixel)] text-[clamp(7px,2vw,12px)] truncate"
+            style={{ color: 'var(--spidey-white)', textShadow: '2px 2px 0 #020810' }}
+          >
+            TRACKER
+          </span>
+        </button>
+        {onPlatformCountClick && (
+          <button
+            type="button"
+            onClick={() => {
+              playSound('click')
+              onPlatformCountClick()
+            }}
+            className="pixel-label px-1 truncate max-w-[160px] sm:max-w-[220px]"
+            style={{ color: 'var(--spidey-cyan)', fontSize: 6 }}
+            aria-label="Platform spider count — make friends via code"
+          >
+            {platformCount == null
+              ? 'SCANNING WEB…'
+              : platformCount === 1
+                ? '1 SPIDER ON WEB · TAP'
+                : `${platformCount} SPIDERS ON WEB · TAP`}
+          </button>
+        )}
+      </div>
 
       <div className="relative flex items-center gap-1 sm:gap-2 min-w-0 justify-end" ref={menuRef}>
         <div className="hidden sm:flex flex-col items-end min-w-0">

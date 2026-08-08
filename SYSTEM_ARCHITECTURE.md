@@ -1,6 +1,6 @@
 # Spidey Tracker — System Architecture
 
-**MADE BY MANISH** · Social Spider adventure + private partner/friend web  
+**MADE BY MANISH** · Social Spider adventure + partner/friend web  
 Document version: **2.0** · Stack: React 19 / TypeScript / Vite / Firebase / Leaflet / Vercel
 
 Engineering reference for **high-level design (HLD)** and **low-level design (LLD)**.  

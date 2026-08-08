@@ -117,20 +117,11 @@ async function startRedirect(): Promise<never> {
 }
 
 /**
- * Mobile: full-page redirect (same-origin authDomain via Vercel /__/auth proxy).
- * Desktop: popup first, redirect if popup is blocked.
+ * Prefer popup (session stays on this origin).
+ * Mobile / blocked popups fall back to redirect via firebaseapp.com auth handler.
  */
 export async function signInWithGoogle(): Promise<User> {
   const auth = requireAuth()
-  const host = typeof window !== 'undefined' ? window.location.hostname : ''
-  // Preview deploy URLs are not registered with Google OAuth
-  if (host.endsWith('.vercel.app') && host !== 'spidey-tracker-pi.vercel.app') {
-    throw new Error('USE PRODUCTION URL — PREVIEW DEPLOYS BLOCK GOOGLE LOGIN')
-  }
-
-  if (isMobileAuthClient()) {
-    return startRedirect()
-  }
 
   try {
     const result = await signInWithPopup(auth, provider)
@@ -139,7 +130,6 @@ export async function signInWithGoogle(): Promise<User> {
   } catch (error: unknown) {
     const code = authCode(error)
 
-    // Popup often succeeds at Google, then IndexedDB throws while saving the session
     if (isIndexedDbRace(error)) {
       if (auth.currentUser) {
         clearRedirectPending()
@@ -152,15 +142,18 @@ export async function signInWithGoogle(): Promise<User> {
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
       throw mapAuthError(error)
     }
+
     if (
+      isMobileAuthClient() ||
       code === 'auth/popup-blocked' ||
       code === 'auth/internal-error' ||
       authMessage(error).includes('Cross-Origin-Opener-Policy') ||
       authMessage(error).includes('policy would block')
     ) {
-      console.warn('[auth] popup failed — redirect', code, error)
+      console.warn('[auth] popup unavailable — redirect', code, error)
       return startRedirect()
     }
+
     console.error('[auth] Google sign-in failed:', code, error)
     throw mapAuthError(error)
   }

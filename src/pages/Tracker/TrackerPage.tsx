@@ -10,6 +10,7 @@ import type { PresenceData, SharedEvent, UserProfile } from '../../types'
 import { useLocationSharing } from '../../hooks/useLocationSharing'
 import { useNearbyDiscoveries } from '../../hooks/useNearbyDiscoveries'
 import { useEvents } from '../../hooks/useEvents'
+import { usePlatformCensus } from '../../hooks/usePlatformCensus'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { useNow } from '../../hooks/useNow'
 import { TrackerShell } from '../../components/layout/TrackerShell'
@@ -33,6 +34,7 @@ import { normalizeAdventure, grantAchievement, bumpMission } from '../../service
 import { EventModal } from '../../components/events/EventModal'
 import { EventInfoPanel } from '../../components/events/EventInfoPanel'
 import { EventsPanel } from '../../components/events/EventsPanel'
+import { SpiderCensusModal } from '../../components/tracker/SpiderCensusModal'
 import { PixelLoader } from '../../components/pixel/PixelLoader'
 import { PixelButton } from '../../components/pixel/PixelButton'
 import { formatDistance, formatRelativeTime, haversineDistanceKm } from '../../utils/geo'
@@ -54,7 +56,8 @@ export function TrackerPage() {
   const questLng =
     myPresence.longitude ?? location.lastLocal?.longitude ?? null
   const nearbyDiscoveries = useNearbyDiscoveries(questLat, questLng)
-  const { events, addEvent } = useEvents(profile?.relationshipId)
+  const { events, addEvent, removeEvent } = useEvents(profile?.uid, profile?.relationshipId)
+  const census = usePlatformCensus(Boolean(profile))
   const online = useOnlineStatus()
   const now = useNow(1000)
 
@@ -65,6 +68,8 @@ export function TrackerPage() {
   const [eventOpen, setEventOpen] = useState(false)
   const [eventsListOpen, setEventsListOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<SharedEvent | null>(null)
+  const [censusOpen, setCensusOpen] = useState(false)
+  const [linkMode, setLinkMode] = useState<'partner' | 'friend'>('partner')
   const [flyTo, setFlyTo] = useState<FlyTarget>(null)
   const [openPopupUid, setOpenPopupUid] = useState<string | null>(null)
   const [popupDelayMs, setPopupDelayMs] = useState(900)
@@ -504,12 +509,17 @@ export function TrackerPage() {
             partnerOnline={partnerPresence.online}
             partnerLastSeen={partnerPresence.lastSeen}
             now={now}
+            platformCount={census.count}
+            onPlatformCountClick={() => setCensusOpen(true)}
             onUserClick={() => setProfileOpen(true)}
             onPartnerClick={() => {
               if (partner) {
                 setFocusSpider({ profile: partner, kind: 'partner' })
                 setPartnerOpen(true)
-              } else setLinkOpen(true)
+              } else {
+                setLinkMode('partner')
+                setLinkOpen(true)
+              }
             }}
             onSelectSpider={openSpider}
             onLogoClick={onLogoClick}
@@ -753,8 +763,20 @@ export function TrackerPage() {
         open={linkOpen}
         profile={profile}
         partner={partner}
+        initialMode={linkMode}
         onClose={() => setLinkOpen(false)}
         onChanged={() => void refreshProfile()}
+      />
+
+      <SpiderCensusModal
+        open={censusOpen}
+        count={census.count}
+        profile={profile}
+        onClose={() => setCensusOpen(false)}
+        onEnterCode={() => {
+          setLinkMode('friend')
+          setLinkOpen(true)
+        }}
       />
 
       <EventsPanel
@@ -763,7 +785,7 @@ export function TrackerPage() {
         myUid={profile.uid}
         myName={profile.displayName}
         partnerName={partner?.displayName}
-        hasRelationship={Boolean(profile.relationshipId)}
+        friendNames={Object.fromEntries(friends.map((f) => [f.uid, f.displayName]))}
         onClose={() => setEventsListOpen(false)}
         onCreate={() => {
           setEventsListOpen(false)
@@ -785,8 +807,8 @@ export function TrackerPage() {
         onClose={() => setEventOpen(false)}
         defaultLat={myPresence.latitude ?? undefined}
         defaultLng={myPresence.longitude ?? undefined}
+        friends={friends}
         onSave={async (data) => {
-          if (!profile.relationshipId) throw new Error('LINK A PARTNER FIRST')
           await addEvent({ ...data, createdBy: profile.uid })
           setEventsListOpen(true)
         }}
@@ -797,12 +819,18 @@ export function TrackerPage() {
         authorName={
           selectedEvent?.createdBy === profile.uid
             ? profile.displayName
-            : partner?.displayName
+            : friends.find((f) => f.uid === selectedEvent?.createdBy)?.displayName ??
+              partner?.displayName
         }
+        isOwner={selectedEvent?.createdBy === profile.uid}
         onClose={() => setSelectedEvent(null)}
         onFlyTo={(ev) =>
           setFlyTo({ lat: ev.latitude, lng: ev.longitude, zoom: 15, nonce: Date.now() })
         }
+        onDelete={async (ev) => {
+          await removeEvent(ev)
+          setSelectedEvent(null)
+        }}
       />
     </>
   )

@@ -130,5 +130,33 @@ service cloud.firestore {
           && resource.data.createdBy == request.auth.uid;
       }
     }
+
+    // Platform map events — everyone or chosen friends (visibleTo)
+    match /mapEvents/{eventId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.visibility == 'everyone'
+          || request.auth.uid == resource.data.createdBy
+          || request.auth.uid in resource.data.get('visibleTo', [])
+        );
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.auth.uid in request.resource.data.visibleTo
+        && request.resource.data.visibility in ['everyone', 'friends']
+        && request.resource.data.title is string
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.visibleTo is list
+        && request.resource.data.visibleTo.size() >= 1
+        && request.resource.data.visibleTo.size() <= 20;
+
+      allow update: if isSignedIn()
+        && resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdBy == resource.data.createdBy;
+
+      allow delete: if isSignedIn()
+        && resource.data.createdBy == request.auth.uid;
+    }
   }
 }

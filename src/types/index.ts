@@ -99,6 +99,9 @@ export interface Relationship {
   status: 'active' | 'unlinked'
 }
 
+/** everyone = whole platform; friends = creator + chosen friend UIDs */
+export type EventVisibility = 'everyone' | 'friends'
+
 export interface SharedEvent {
   id: string
   title: string
@@ -112,6 +115,13 @@ export interface SharedEvent {
   createdBy: string
   createdAt: number
   updatedAt: number
+  /** Defaults to friends/partner-legacy when missing (old relationship events). */
+  visibility?: EventVisibility
+  /** UIDs allowed to see the event (always includes createdBy). */
+  visibleTo?: string[]
+  /** Where the doc lives — used for delete/update paths. */
+  storage?: 'map' | 'relationship'
+  relationshipId?: string
 }
 
 export interface PresenceData {

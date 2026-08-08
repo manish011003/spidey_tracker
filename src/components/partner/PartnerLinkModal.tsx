@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PixelModal } from '../pixel/PixelModal'
 import { PixelButton } from '../pixel/PixelButton'
 import type { UserProfile } from '../../types'
@@ -8,23 +8,41 @@ import { normalizePartnerCode } from '../../utils/partnerCode'
 import { playSound, unlockAudio } from '../../services/sound/audio'
 import { ShareCodeButtons } from '../share/ShareCodeButtons'
 
+type Mode = 'partner' | 'friend'
+
 type Props = {
   open: boolean
   profile: UserProfile
   partner: UserProfile | null
   onClose: () => void
   onChanged: () => void
+  /** Open already set to friend or partner mode */
+  initialMode?: Mode
 }
 
-type Mode = 'partner' | 'friend'
-
-export function PartnerLinkModal({ open, profile, partner, onClose, onChanged }: Props) {
-  const [mode, setMode] = useState<Mode>('partner')
+export function PartnerLinkModal({
+  open,
+  profile,
+  partner,
+  onClose,
+  onChanged,
+  initialMode = 'partner',
+}: Props) {
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmUnlink, setConfirmUnlink] = useState(false)
   const [friendNotice, setFriendNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setMode(initialMode)
+    setCode('')
+    setError(null)
+    setFriendNotice(null)
+    setConfirmUnlink(false)
+  }, [open, initialMode])
 
   const link = async () => {
     setBusy(true)

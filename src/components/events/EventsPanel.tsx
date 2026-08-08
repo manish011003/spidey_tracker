@@ -10,11 +10,17 @@ type Props = {
   myUid: string
   partnerName?: string
   myName: string
-  hasRelationship: boolean
+  friendNames?: Record<string, string>
   onClose: () => void
   onCreate: () => void
   onSelect: (event: SharedEvent) => void
   onFlyTo: (event: SharedEvent) => void
+}
+
+function visibilityTag(ev: SharedEvent): string {
+  if (ev.storage === 'relationship') return 'PARTNER'
+  if (ev.visibility === 'everyone') return 'EVERYONE'
+  return 'FRIENDS'
 }
 
 export function EventsPanel({
@@ -23,7 +29,7 @@ export function EventsPanel({
   myUid,
   partnerName,
   myName,
-  hasRelationship,
+  friendNames = {},
   onClose,
   onCreate,
   onSelect,
@@ -36,17 +42,24 @@ export function EventsPanel({
     return b.createdAt - a.createdAt
   })
 
+  const authorOf = (ev: SharedEvent) => {
+    if (ev.createdBy === myUid) return myName
+    if (partnerName && friendNames[ev.createdBy] == null && ev.storage === 'relationship') {
+      return partnerName
+    }
+    return friendNames[ev.createdBy] ?? partnerName ?? 'SPIDER'
+  }
+
   return (
     <PixelModal open={open} title="SHARED EVENTS" onClose={onClose} wide>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <p className="pixel-label" style={{ color: 'var(--spidey-cyan)', fontSize: 7 }}>
-            {sorted.length} EVENT{sorted.length === 1 ? '' : 'S'} ON YOUR WEB
+            {sorted.length} EVENT{sorted.length === 1 ? '' : 'S'} ON THE WEB
           </p>
           <PixelButton
             variant="orange"
             className="!text-[7px] !py-2 !px-3"
-            disabled={!hasRelationship}
             onClick={() => {
               playSound('click')
               onCreate()
@@ -56,13 +69,7 @@ export function EventsPanel({
           </PixelButton>
         </div>
 
-        {!hasRelationship && (
-          <p className="pixel-label" style={{ color: 'var(--spidey-yellow)', fontSize: 7 }}>
-            LINK A PARTNER TO CREATE & VIEW SHARED EVENTS
-          </p>
-        )}
-
-        {hasRelationship && sorted.length === 0 && (
+        {sorted.length === 0 && (
           <div className="pixel-inset p-4 text-center">
             <p className="pixel-label" style={{ color: 'var(--spidey-text-dim)', fontSize: 8 }}>
               NO EVENTS YET
@@ -71,7 +78,7 @@ export function EventsPanel({
               className="font-[family-name:var(--font-readable)] text-lg mt-2"
               style={{ color: 'var(--spidey-text-dim)' }}
             >
-              Drop memories on the map — dates, cafes, trips.
+              Drop memories on the map — for everyone or chosen friends.
             </p>
             <PixelButton className="mt-3 w-full" onClick={onCreate}>
               CREATE FIRST EVENT
@@ -82,9 +89,9 @@ export function EventsPanel({
         <ul className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto m-0 p-0 list-none">
           {sorted.map((ev) => {
             const icon = getEventIcon(ev.icon)
-            const author = ev.createdBy === myUid ? myName : (partnerName ?? 'PARTNER')
+            const author = authorOf(ev)
             return (
-              <li key={ev.id}>
+              <li key={`${ev.storage}:${ev.id}`}>
                 <button
                   type="button"
                   className="w-full pixel-inset p-2 flex gap-2 items-stretch text-left"
@@ -108,7 +115,7 @@ export function EventsPanel({
                       {ev.locationName || 'UNKNOWN LOC'}
                     </span>
                     <span className="pixel-label" style={{ color: 'var(--spidey-text-dim)', fontSize: 6 }}>
-                      {ev.date || 'NO DATE'} · {author}
+                      {ev.date || 'NO DATE'} · {author} · {visibilityTag(ev)}
                     </span>
                   </span>
                   <span
