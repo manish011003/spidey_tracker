@@ -3,20 +3,7 @@ import { BootScreen } from '../../components/pixel/BootScreen'
 import { useAuth } from '../../context/AuthContext'
 
 export function LandingPage() {
-  const {
-    signIn,
-    startPhoneSignIn,
-    confirmPhoneSignIn,
-    cancelPhoneSignIn,
-    phoneCodeSent,
-    phoneHint,
-    loading,
-    error,
-    configured,
-    profile,
-    user,
-    returningFromGoogle,
-  } = useAuth()
+  const { signIn, loading, error, configured, profile, user, returningFromGoogle } = useAuth()
 
   if (!loading && user && profile) {
     return (
@@ -30,11 +17,6 @@ export function LandingPage() {
   return (
     <BootScreen
       onSignIn={() => void signIn()}
-      onSendPhoneCode={(phone) => void startPhoneSignIn(phone)}
-      onConfirmPhoneCode={(code) => void confirmPhoneSignIn(code)}
-      onCancelPhone={cancelPhoneSignIn}
-      phoneCodeSent={phoneCodeSent}
-      phoneHint={phoneHint}
       loading={loading}
       error={error}
       configured={configured}

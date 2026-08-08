@@ -161,17 +161,14 @@ Full layout + module table → [SYSTEM_ARCHITECTURE.md §3](./SYSTEM_ARCHITECTUR
 
 ## Firebase setup (maintainers)
 
-1. Create Firebase project → enable **Google** sign-in (and optionally **Phone**).  
+1. Create Firebase project → enable **Google** sign-in.  
 2. Create **Firestore** + **Realtime Database**.  
 3. Add Web app → copy config into `.env` / Vercel env.  
 4. **Authorized domains:** `localhost`, your Vercel host (`*.vercel.app`).  
-5. Google Cloud → **same project as Firebase** → Google Auth Platform / OAuth consent  
-   - Audience **External**  
-   - If **Testing**, add every Gmail as a test user (or publish the app)  
-6. **Phone auth (optional):** Authentication → Sign-in method → **Phone** → Enable  
-   - App uses invisible reCAPTCHA + SMS OTP on the boot screen  
-   - Testing: add test phone numbers under Phone provider settings  
-7. Deploy rules:
+5. Google Cloud → **same project as Firebase** → OAuth Web client  
+   - JS origin: `https://your-app.vercel.app`  
+   - Redirect URI: `https://your-app.vercel.app/__/auth/handler`  
+6. Deploy rules:
 
 ```bash
 npx firebase-tools login

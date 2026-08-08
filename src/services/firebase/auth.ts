@@ -1,21 +1,13 @@
 import {
   GoogleAuthProvider,
-  RecaptchaVerifier,
   signInWithPopup,
   signInWithRedirect,
-  signInWithPhoneNumber,
   getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  type ConfirmationResult,
   type User,
 } from 'firebase/auth'
 import { isFirebaseConfigured, requireAuth } from './config'
-
-const RECAPTCHA_CONTAINER_ID = 'spidey-recaptcha'
-
-let phoneConfirmation: ConfirmationResult | null = null
-let phoneRecaptcha: RecaptchaVerifier | null = null
 
 const provider = new GoogleAuthProvider()
 provider.setCustomParameters({ prompt: 'select_account' })
@@ -76,7 +68,7 @@ function mapAuthError(error: unknown): Error {
     return new Error('WEB CONNECTION INTERRUPTED')
   }
   if (code === 'auth/operation-not-allowed') {
-    return new Error('SIGN-IN METHOD NOT ENABLED IN FIREBASE')
+    return new Error('GOOGLE SIGN-IN NOT ENABLED IN FIREBASE')
   }
   if (code === 'auth/unauthorized-domain') {
     return new Error('DOMAIN NOT AUTHORIZED IN FIREBASE AUTH SETTINGS')
@@ -86,24 +78,6 @@ function mapAuthError(error: unknown): Error {
   }
   if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
     return new Error('SIGN-IN CANCELLED — TAP AGAIN')
-  }
-  if (code === 'auth/invalid-phone-number') {
-    return new Error('INVALID PHONE — USE +COUNTRYCODE NUMBER')
-  }
-  if (code === 'auth/missing-phone-number') {
-    return new Error('ENTER PHONE NUMBER')
-  }
-  if (code === 'auth/too-many-requests') {
-    return new Error('TOO MANY SMS ATTEMPTS — WAIT AND RETRY')
-  }
-  if (code === 'auth/invalid-verification-code') {
-    return new Error('WRONG CODE — CHECK SMS AND RETRY')
-  }
-  if (code === 'auth/code-expired' || code === 'auth/session-expired') {
-    return new Error('CODE EXPIRED — REQUEST A NEW ONE')
-  }
-  if (code === 'auth/captcha-check-failed' || code === 'auth/invalid-app-credential') {
-    return new Error('RECAPTCHA FAILED — REFRESH AND RETRY')
   }
   if (
     code === 'auth/access-denied' ||
@@ -116,95 +90,6 @@ function mapAuthError(error: unknown): Error {
   return new Error(
     code ? `IDENTITY VERIFICATION FAILED (${code})` : 'IDENTITY VERIFICATION FAILED',
   )
-}
-
-/** Normalize to E.164. Bare 10-digit numbers default to +91. */
-export function normalizePhoneNumber(input: string): string {
-  const trimmed = input.trim()
-  if (!trimmed) return ''
-  let digits = trimmed.replace(/[^\d+]/g, '')
-  if (digits.startsWith('00')) digits = `+${digits.slice(2)}`
-  if (digits.startsWith('+')) return digits
-  const only = digits.replace(/\D/g, '')
-  if (only.length === 10) return `+91${only}`
-  if (only.length > 10) return `+${only}`
-  return only ? `+${only}` : ''
-}
-
-function clearPhoneRecaptcha(): void {
-  if (phoneRecaptcha) {
-    try {
-      phoneRecaptcha.clear()
-    } catch {
-      /* already cleared */
-    }
-    phoneRecaptcha = null
-  }
-  const el = document.getElementById(RECAPTCHA_CONTAINER_ID)
-  if (el) el.innerHTML = ''
-}
-
-export function resetPhoneSignIn(): void {
-  phoneConfirmation = null
-  clearPhoneRecaptcha()
-}
-
-function ensureRecaptchaVerifier(): RecaptchaVerifier {
-  const auth = requireAuth()
-  clearPhoneRecaptcha()
-  let host = document.getElementById(RECAPTCHA_CONTAINER_ID)
-  if (!host) {
-    host = document.createElement('div')
-    host.id = RECAPTCHA_CONTAINER_ID
-    host.style.display = 'none'
-    document.body.appendChild(host)
-  }
-  phoneRecaptcha = new RecaptchaVerifier(auth, RECAPTCHA_CONTAINER_ID, {
-    size: 'invisible',
-  })
-  return phoneRecaptcha
-}
-
-/** Send SMS OTP. Requires Phone provider enabled in Firebase Console. */
-export async function sendPhoneVerificationCode(phoneInput: string): Promise<string> {
-  const phone = normalizePhoneNumber(phoneInput)
-  if (!phone || phone.length < 8) {
-    throw new Error('ENTER PHONE WITH COUNTRY CODE (+91…)')
-  }
-  const auth = requireAuth()
-  try {
-    const verifier = ensureRecaptchaVerifier()
-    phoneConfirmation = await signInWithPhoneNumber(auth, phone, verifier)
-    return phone
-  } catch (error: unknown) {
-    resetPhoneSignIn()
-    console.error('[auth] phone send failed', authCode(error), error)
-    throw mapAuthError(error)
-  }
-}
-
-/** Confirm SMS code and complete sign-in. */
-export async function confirmPhoneVerificationCode(code: string): Promise<User> {
-  const trimmed = code.replace(/\s/g, '')
-  if (!/^\d{6}$/.test(trimmed)) {
-    throw new Error('ENTER THE 6-DIGIT SMS CODE')
-  }
-  if (!phoneConfirmation) {
-    throw new Error('REQUEST A CODE FIRST')
-  }
-  try {
-    const result = await phoneConfirmation.confirm(trimmed)
-    resetPhoneSignIn()
-    clearRedirectPending()
-    return result.user
-  } catch (error: unknown) {
-    console.error('[auth] phone confirm failed', authCode(error), error)
-    throw mapAuthError(error)
-  }
-}
-
-export function isPhoneCodePending(): boolean {
-  return phoneConfirmation != null
 }
 
 async function startRedirect(): Promise<never> {

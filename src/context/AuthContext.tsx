@@ -13,12 +13,9 @@ import type { UserProfile } from '../types'
 import { isFirebaseConfigured, requireAuth } from '../services/firebase/config'
 import {
   clearRedirectPending,
-  confirmPhoneVerificationCode,
   handleRedirectResult,
   hardResetToLogin,
   isRedirectPending,
-  resetPhoneSignIn,
-  sendPhoneVerificationCode,
   signInWithGoogle,
   signOut as firebaseSignOut,
   subscribeToAuth,
@@ -35,12 +32,7 @@ type AuthContextValue = {
   error: string | null
   configured: boolean
   returningFromGoogle: boolean
-  phoneCodeSent: boolean
-  phoneHint: string | null
   signIn: () => Promise<void>
-  startPhoneSignIn: (phone: string) => Promise<void>
-  confirmPhoneSignIn: (code: string) => Promise<void>
-  cancelPhoneSignIn: () => void
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
   clearError: () => void
@@ -66,8 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true)
   const [signingIn, setSigningIn] = useState(false)
   const [returningFromGoogle, setReturningFromGoogle] = useState(() => isRedirectPending())
-  const [phoneCodeSent, setPhoneCodeSent] = useState(false)
-  const [phoneHint, setPhoneHint] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const shellGen = useRef(0)
 
@@ -96,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (cancelled) return
 
-      // If redirect already signed us in, attach immediately
       try {
         const current = requireAuth().currentUser
         if (current) {
@@ -118,7 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (isRedirectPending()) {
             if (pendingWatch) window.clearTimeout(pendingWatch)
-            // Give mobile Safari time to hydrate session after same-origin redirect
             pendingWatch = window.setTimeout(() => {
               if (cancelled) return
               try {
@@ -148,8 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (cancelled || gen !== shellGen.current) return
             setProfile(shell)
             setError(null)
-            setPhoneCodeSent(false)
-            setPhoneHint(null)
           } catch (e) {
             console.error('[auth] ensureUserShell failed', e)
             try {
@@ -157,8 +143,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (fallback && !cancelled && gen === shellGen.current) {
                 setProfile(fallback)
                 setError(null)
-                setPhoneCodeSent(false)
-                setPhoneHint(null)
                 return
               }
             } catch {
@@ -230,50 +214,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => setSigningIn(false), 20_000)
   }, [])
 
-  const startPhoneSignIn = useCallback(async (phone: string) => {
-    setError(null)
-    setSigningIn(true)
-    try {
-      const normalized = await sendPhoneVerificationCode(phone)
-      setPhoneHint(normalized)
-      setPhoneCodeSent(true)
-    } catch (e) {
-      setPhoneCodeSent(false)
-      setPhoneHint(null)
-      setError(e instanceof Error ? e.message : 'SMS SEND FAILED')
-    } finally {
-      setSigningIn(false)
-    }
-  }, [])
-
-  const confirmPhoneSignIn = useCallback(async (code: string) => {
-    setError(null)
-    setSigningIn(true)
-    try {
-      await confirmPhoneVerificationCode(code)
-      // onAuthStateChanged loads profile; keep verifying briefly
-      window.setTimeout(() => setSigningIn(false), 20_000)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'CODE VERIFY FAILED')
-      setSigningIn(false)
-    }
-  }, [])
-
-  const cancelPhoneSignIn = useCallback(() => {
-    resetPhoneSignIn()
-    setPhoneCodeSent(false)
-    setPhoneHint(null)
-    setError(null)
-    setSigningIn(false)
-  }, [])
-
   const signOut = useCallback(async () => {
     setError(null)
     setSigningIn(false)
     setReturningFromGoogle(false)
-    resetPhoneSignIn()
-    setPhoneCodeSent(false)
-    setPhoneHint(null)
     try {
       await firebaseSignOut()
     } finally {
@@ -300,31 +244,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       configured: isFirebaseConfigured,
       returningFromGoogle,
-      phoneCodeSent,
-      phoneHint,
       signIn,
-      startPhoneSignIn,
-      confirmPhoneSignIn,
-      cancelPhoneSignIn,
       signOut,
       refreshProfile,
       clearError: () => setError(null),
     }),
-    [
-      user,
-      profile,
-      loading,
-      error,
-      returningFromGoogle,
-      phoneCodeSent,
-      phoneHint,
-      signIn,
-      startPhoneSignIn,
-      confirmPhoneSignIn,
-      cancelPhoneSignIn,
-      signOut,
-      refreshProfile,
-    ],
+    [user, profile, loading, error, returningFromGoogle, signIn, signOut, refreshProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
