@@ -119,50 +119,52 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return mapUserDoc(uid, snap.data() as Record<string, unknown>)
 }
 
-async function claimPartnerCode(uid: string, preferred?: string): Promise<string> {
-  let lastError: unknown
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const code = attempt === 0 && preferred ? preferred : generatePartnerCode()
+/** Best-effort: never block login if the code index is flaky. */
+async function ensurePartnerCodeIndex(uid: string, currentCode: string): Promise<string> {
+  const code = currentCode || generatePartnerCode()
+  try {
+    await registerPartnerCode(code, uid)
+    return code
+  } catch (err) {
+    console.warn('[users] partner code register failed, retrying', err)
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const next = generatePartnerCode()
     try {
-      await registerPartnerCode(code, uid)
-      return code
+      await registerPartnerCode(next, uid)
+      if (next !== code) {
+        const db = requireDb()
+        await updateDoc(doc(db, 'users', uid), {
+          partnerCode: next,
+          updatedAt: serverTimestamp(),
+        })
+      }
+      return next
     } catch (err) {
-      lastError = err
+      console.warn('[users] partner code retry failed', err)
     }
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('FAILED TO CLAIM SPIDER CODE')
+
+  // Login must still succeed — linking by code may fail until next session
+  return code
 }
 
 export async function ensureUserShell(user: User): Promise<UserProfile> {
   const existing = await getUserProfile(user.uid)
   if (existing) {
-    // Backfill partnerCodes index if an earlier signup wrote the user doc but failed here
-    try {
-      await registerPartnerCode(existing.partnerCode, user.uid)
-    } catch {
-      const fresh = await claimPartnerCode(user.uid)
-      if (fresh !== existing.partnerCode) {
-        const db = requireDb()
-        await updateDoc(doc(db, 'users', user.uid), {
-          partnerCode: fresh,
-          updatedAt: serverTimestamp(),
-        })
-        return { ...existing, partnerCode: fresh }
-      }
-    }
-    return existing
+    const code = await ensurePartnerCodeIndex(user.uid, existing.partnerCode)
+    return code === existing.partnerCode ? existing : { ...existing, partnerCode: code }
   }
 
   const db = requireDb()
   const now = Date.now()
   const partnerCode = generatePartnerCode()
-  const profile: UserProfile = {
+
+  const payload: Record<string, unknown> = {
     uid: user.uid,
     displayName: user.displayName?.trim() || 'Spider',
     email: user.email ?? '',
-    ...(user.photoURL ? { photoURL: user.photoURL } : {}),
     role: 'boyfriend',
     spiderId: 'classic',
     suitId: 'classic',
@@ -174,45 +176,49 @@ export async function ensureUserShell(user: User): Promise<UserProfile> {
     incomingFriendRequests: [],
     outgoingFriendRequests: [],
     onboardingComplete: false,
-    createdAt: now,
-    updatedAt: now,
     preferences: { ...DEFAULT_PREFERENCES },
     adventure: emptyAdventure(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }
+  if (user.photoURL) payload.photoURL = user.photoURL
+
+  try {
+    await setDoc(doc(db, 'users', user.uid), payload)
+  } catch (err) {
+    // Concurrent first login may have created the doc — load it
+    const raced = await getUserProfile(user.uid)
+    if (raced) {
+      const code = await ensurePartnerCodeIndex(user.uid, raced.partnerCode)
+      return code === raced.partnerCode ? raced : { ...raced, partnerCode: code }
+    }
+    console.error('[users] create shell failed', err)
+    throw err
   }
 
-  // Explicit payload — never write `undefined` (breaks accounts with no Google photo)
-  await setDoc(doc(db, 'users', user.uid), {
-    uid: profile.uid,
-    displayName: profile.displayName,
-    email: profile.email,
+  const claimed = await ensurePartnerCodeIndex(user.uid, partnerCode)
+
+  return {
+    uid: user.uid,
+    displayName: (payload.displayName as string) || 'Spider',
+    email: (payload.email as string) || '',
     ...(user.photoURL ? { photoURL: user.photoURL } : {}),
-    role: profile.role,
-    spiderId: profile.spiderId,
-    suitId: profile.suitId,
-    statusMessage: profile.statusMessage,
+    role: 'boyfriend',
+    spiderId: 'classic',
+    suitId: 'classic',
+    statusMessage: 'WEB SENSORS ONLINE',
     partnerId: null,
-    partnerCode: profile.partnerCode,
+    partnerCode: claimed,
     relationshipId: null,
     friendIds: [],
     incomingFriendRequests: [],
     outgoingFriendRequests: [],
     onboardingComplete: false,
-    preferences: profile.preferences,
-    adventure: profile.adventure,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
-
-  const claimed = await claimPartnerCode(user.uid, partnerCode)
-  if (claimed !== partnerCode) {
-    await updateDoc(doc(db, 'users', user.uid), {
-      partnerCode: claimed,
-      updatedAt: serverTimestamp(),
-    })
-    profile.partnerCode = claimed
+    createdAt: now,
+    updatedAt: now,
+    preferences: { ...DEFAULT_PREFERENCES },
+    adventure: emptyAdventure(),
   }
-
-  return profile
 }
 
 export async function completeOnboarding(
@@ -271,8 +277,9 @@ export async function updateProfileFields(
   >,
 ): Promise<void> {
   const db = requireDb()
-  await updateDoc(doc(db, 'users', uid), {
-    ...fields,
-    updatedAt: serverTimestamp(),
-  })
+  const cleaned: Record<string, unknown> = { updatedAt: serverTimestamp() }
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) cleaned[key] = value
+  }
+  await updateDoc(doc(db, 'users', uid), cleaned)
 }

@@ -88,10 +88,19 @@ export async function signInWithGoogle(): Promise<User> {
       throw new Error('GOOGLE SIGN-IN NOT ENABLED IN FIREBASE')
     }
     if (code === 'auth/unauthorized-domain') {
-      throw new Error('DOMAIN NOT AUTHORIZED IN FIREBASE')
+      throw new Error('DOMAIN NOT AUTHORIZED IN FIREBASE AUTH SETTINGS')
     }
     if (code === 'auth/configuration-not-found') {
       throw new Error('FIREBASE AUTH NOT SET UP FOR THIS APP')
+    }
+    // OAuth consent screen in Testing mode blocks accounts not on the test-user list
+    if (
+      code === 'auth/access-denied' ||
+      msg.includes('access_denied') ||
+      msg.includes('Access blocked') ||
+      msg.includes('has not completed the Google verification')
+    ) {
+      throw new Error('GOOGLE BLOCKED SIGN-IN — ADD USER AS TEST USER OR PUBLISH OAUTH APP')
     }
 
     if (shouldUseRedirectFallback(error)) {

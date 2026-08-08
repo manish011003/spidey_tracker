@@ -78,15 +78,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch (e) {
           console.error('[auth] ensureUserShell failed', e)
+          // Partial signup: user doc may exist even if code index failed
+          try {
+            const fallback = await getUserProfile(next.uid)
+            if (fallback && !cancelled) {
+              setProfile(fallback)
+              setError(null)
+              return
+            }
+          } catch {
+            /* ignore */
+          }
           if (!cancelled) {
             const raw = e instanceof Error ? e.message : String(e)
             const code = (e as { code?: string })?.code
-            if (code === 'permission-denied' || raw.includes('permission')) {
+            if (code === 'permission-denied' || raw.toLowerCase().includes('permission')) {
               setError('PROFILE PERMISSION DENIED — CHECK FIRESTORE RULES')
             } else if (raw.includes('Unsupported field value') || raw.includes('undefined')) {
               setError('PROFILE WRITE FAILED — RETRY SIGN-IN')
             } else {
-              setError('FAILED TO LOAD SPIDER PROFILE')
+              setError(`FAILED TO LOAD SPIDER PROFILE${code ? ` (${code})` : ''}`)
             }
           }
         } finally {

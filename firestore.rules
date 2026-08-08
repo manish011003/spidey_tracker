@@ -42,10 +42,9 @@ service cloud.firestore {
         && request.resource.data.onboardingComplete == false;
 
       allow update: if
-        // Owner updating own profile
+        // Owner updating own profile (may refresh partnerCode if index claim raced)
         (isSelf(userId)
           && request.resource.data.uid == userId
-          && request.resource.data.partnerCode == resource.data.partnerCode
           && request.resource.data.email == resource.data.email)
         // Incoming partner link
         || (isSignedIn()
