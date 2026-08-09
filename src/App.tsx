@@ -6,6 +6,7 @@ import { OnboardingPage } from './pages/Onboarding/OnboardingPage'
 import { TrackerPage } from './pages/Tracker/TrackerPage'
 import { SettingsPage } from './pages/Settings/SettingsPage'
 import { PixelLoader } from './components/pixel/PixelLoader'
+import { IntroCinematic } from './components/pixel/IntroCinematic'
 
 function RootRedirect() {
   const { user, profile, loading, configured } = useAuth()
@@ -25,21 +26,23 @@ function RootRedirect() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<RootRedirect />} />
-          <Route path="/login" element={<LandingPage />} />
-          <Route element={<ProtectedRoute requireIncompleteOnboarding />}>
-            <Route path="/onboarding" element={<OnboardingPage />} />
-          </Route>
-          <Route element={<ProtectedRoute requireOnboardingComplete />}>
-            <Route path="/tracker" element={<TrackerPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <IntroCinematic>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/login" element={<LandingPage />} />
+            <Route element={<ProtectedRoute requireIncompleteOnboarding />}>
+              <Route path="/onboarding" element={<OnboardingPage />} />
+            </Route>
+            <Route element={<ProtectedRoute requireOnboardingComplete />}>
+              <Route path="/tracker" element={<TrackerPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </IntroCinematic>
   )
 }
